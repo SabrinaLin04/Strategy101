@@ -11,20 +11,21 @@ public class Strategy101 : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
-			PublicIncludePaths.AddRange(new string[] {
-				"Strategy101/Grid",
-				"Strategy101/Units",
-				"Strategy101/AI",
-				"Strategy101/GameLogic",
-				"Strategy101/UI"
-				});
-		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
-		
-		// Uncomment if you are using online features
-		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
+        PublicIncludePaths.AddRange(new string[] {
+            "Strategy101/Public",
+            "Strategy101/Public/Grid",
+            "Strategy101/Public/Units",
+            "Strategy101/Public/AI",
+            "Strategy101/Public/GameLogic",
+            "Strategy101/Public/UI"
+        });
+        // PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
-		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
-	}
+        // Uncomment if you are using online features
+        // PrivateDependencyModuleNames.Add("OnlineSubsystem");
+
+        // To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
+    }
 
     
 }
