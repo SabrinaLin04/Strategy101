@@ -74,7 +74,7 @@ public:
 
     /** Proprietario dell'unità */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit|State")
-    EOwner Owner;
+    EOwner UnitOwner;
 
     // --- Metodi virtuali ---
 

@@ -1,26 +1,17 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
+#include "BaseUnit.h"
 #include "Brawler.generated.h"
 
 UCLASS()
-class STRATEGY101_API ABrawler : public AActor
+class STRATEGY101_API ABrawler : public ABaseUnit
 {
-	GENERATED_BODY()
-	
-public:	
-	// Sets default values for this actor's properties
-	ABrawler();
+    GENERATED_BODY()
 
-protected:
-	// Called when the game starts or when spawned
-	virtual void BeginPlay() override;
+public:
+    ABrawler();
 
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
+    /** Override danno: Brawler usa range 1-6 */
+    virtual int32 RollDamage() const override;
 };

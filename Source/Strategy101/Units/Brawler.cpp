@@ -1,27 +1,18 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+#include "Brawler.h"
 
-
-#include "Units/Brawler.h"
-
-// Sets default values
 ABrawler::ABrawler()
 {
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
-
+    // Statistiche Brawler come da specifiche
+    MaxMovement = 6;
+    AttackType = EAttackType::Melee;
+    AttackRange = 1;
+    MinDamage = 1;
+    MaxDamage = 6;
+    MaxHP = 40;
+    CurrentHP = MaxHP;
 }
 
-// Called when the game starts or when spawned
-void ABrawler::BeginPlay()
+int32 ABrawler::RollDamage() const
 {
-	Super::BeginPlay();
-	
+    return FMath::RandRange(MinDamage, MaxDamage);
 }
-
-// Called every frame
-void ABrawler::Tick(float DeltaTime)
-{
-	Super::Tick(DeltaTime);
-
-}
-
