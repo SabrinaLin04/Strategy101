@@ -1,7 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 using UnrealBuildTool;
-
 public class Strategy101 : ModuleRules
 {
 	public Strategy101(ReadOnlyTargetRules Target) : base(Target)
@@ -12,7 +11,13 @@ public class Strategy101 : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
-		// Uncomment if you are using Slate UI
+			PublicIncludePaths.AddRange(new string[] {
+				"Strategy101/Grid",
+				"Strategy101/Units",
+				"Strategy101/AI",
+				"Strategy101/GameLogic",
+				"Strategy101/UI"
+				});
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 		
 		// Uncomment if you are using online features
@@ -20,4 +25,7 @@ public class Strategy101 : ModuleRules
 
 		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
 	}
+
+    
 }
+
