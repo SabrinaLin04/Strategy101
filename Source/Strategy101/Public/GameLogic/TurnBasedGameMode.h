@@ -5,6 +5,8 @@
 #include "GameLogic/TurnBasedGameState.h"
 #include "Units/BaseUnit.h"
 #include "TurnBasedGameMode.generated.h"
+#include "Camera/CameraActor.h"
+#include "EngineUtils.h"
 
 UCLASS()
 class STRATEGY101_API ATurnBasedGameMode : public AGameModeBase

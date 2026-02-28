@@ -26,6 +26,7 @@ void AGridCell::BeginPlay()
 void AGridCell::UpdateVisualColor()
 {
     if (!CellMesh) return;
+    if (CellMesh->GetNumMaterials() == 0) return; // nessun materiale assegnato
 
     // Crea un MaterialInstanceDynamic per cambiare colore a runtime
     UMaterialInstanceDynamic* DynMat = CellMesh->CreateAndSetMaterialInstanceDynamic(0);

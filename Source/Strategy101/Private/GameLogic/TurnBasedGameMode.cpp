@@ -16,7 +16,20 @@ void ATurnBasedGameMode::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Avvia la partita con il coin flip
+    // Cerca la camera nella scena e imposta come view target
+    AActor* Cam = nullptr;
+    for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
+    {
+        Cam = *It;
+        break;
+    }
+
+    if (Cam)
+    {
+        APlayerController* PC = GetWorld()->GetFirstPlayerController();
+        if (PC) PC->SetViewTarget(Cam);
+    }
+
     PerformCoinFlip();
 }
 
