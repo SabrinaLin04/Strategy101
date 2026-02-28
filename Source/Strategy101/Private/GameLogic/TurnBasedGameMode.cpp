@@ -7,7 +7,7 @@ ATurnBasedGameMode::ATurnBasedGameMode()
 {
     // Imposta il GameState personalizzato
     GameStateClass = ATurnBasedGameState::StaticClass();
-
+    DefaultPawnClass = nullptr; // disabilita il pawn di default
     UnitsPlacedCount = 0;
     PlacementTurn = ETurnOwner::Human;
 }
@@ -16,23 +16,28 @@ void ATurnBasedGameMode::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Cerca la camera nella scena e imposta come view target
-    AActor* Cam = nullptr;
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC) return;
+
+    // Disabilita la gestione automatica della camera da parte del controller
+    PC->bAutoManageActiveCameraTarget = false;
+
     for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
     {
-        Cam = *It;
-        break;
-    }
+        ACameraActor* Cam = *It;
+        UE_LOG(LogTemp, Warning, TEXT("Found camera at: %s"), *Cam->GetActorLocation().ToString());
 
-    if (Cam)
-    {
-        APlayerController* PC = GetWorld()->GetFirstPlayerController();
-        if (PC) PC->SetViewTarget(Cam);
+        // Forza rotazione verso il basso
+        Cam->SetActorRotation(FRotator(-90.f, 0.f, 0.f));
+
+        FViewTargetTransitionParams Params;
+        Params.BlendTime = 0.f;
+        PC->SetViewTarget(Cam, Params);
+        break;
     }
 
     PerformCoinFlip();
 }
-
 void ATurnBasedGameMode::PerformCoinFlip()
 {
     ATurnBasedGameState* GS = GetTurnGameState();

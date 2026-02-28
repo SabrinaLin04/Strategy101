@@ -86,6 +86,9 @@ void AGridManager::GenerateGrid()
         }
     }
 
+    //verifica connettività e corregge eventuali isole
+    EnsureConnectivity();
+
     UE_LOG(LogTemp, Warning, TEXT("Grid generated: %d x %d cells"), GridWidth, GridHeight);
 }
 
@@ -154,4 +157,89 @@ void AGridManager::ClearGrid()
         if (Cell) Cell->Destroy();
     }
     Cells.Empty();
+}
+
+bool AGridManager::IsCellWalkable(int32 X, int32 Y) const
+{
+    AGridCell* Cell = GetCell(X, Y);
+    if (!Cell) return false;
+    return Cell->ElevationLevel > 0;
+}
+
+void AGridManager::EnsureConnectivity()
+{
+    //trova la prima cella calpestabile come punto di partenza del BFS
+    int32 StartX = -1, StartY = -1;
+    for (int32 Y = 0; Y < GridHeight && StartX == -1; Y++)
+        for (int32 X = 0; X < GridWidth && StartX == -1; X++)
+            if (IsCellWalkable(X, Y)) { StartX = X; StartY = Y; }
+
+    if (StartX == -1) return; // tutta acqua — caso estremo
+
+    // BFS per visitare tutte le celle raggiungibili
+    TArray<bool> Visited;
+    Visited.SetNumZeroed(GridWidth * GridHeight);
+
+    TQueue<FIntPoint> Queue;
+    Queue.Enqueue(FIntPoint(StartX, StartY));
+    Visited[StartX + StartY * GridWidth] = true;
+
+    const int32 DX[] = { 0,  0, -1, 1 };
+    const int32 DY[] = { -1, 1,  0, 0 };
+
+    while (!Queue.IsEmpty())
+    {
+        FIntPoint Current;
+        Queue.Dequeue(Current);
+
+        for (int32 i = 0; i < 4; i++)
+        {
+            int32 NX = Current.X + DX[i];
+            int32 NY = Current.Y + DY[i];
+
+            if (!IsValidCoord(NX, NY)) continue;
+            if (Visited[NX + NY * GridWidth]) continue;
+            if (!IsCellWalkable(NX, NY)) continue;
+
+            Visited[NX + NY * GridWidth] = true;
+            Queue.Enqueue(FIntPoint(NX, NY));
+        }
+    }
+
+    //celle calpestabili non visitate = isole isolate — le riempiamo a livello 1
+    int32 FixedCells = 0;
+    for (int32 Y = 0; Y < GridHeight; Y++)
+    {
+        for (int32 X = 0; X < GridWidth; X++)
+        {
+            if (!IsCellWalkable(X, Y)) continue;
+            if (Visited[X + Y * GridWidth]) continue;
+
+            // Cella isolata — la abbassiamo a piano (livello 1) e la colleghiamo
+            AGridCell* Cell = GetCell(X, Y);
+            if (!Cell) continue;
+
+            // Cerca il vicino calpestabile già connesso più vicino e allinealo
+            for (int32 i = 0; i < 4; i++)
+            {
+                int32 NX = X + DX[i];
+                int32 NY = Y + DY[i];
+                if (!IsValidCoord(NX, NY)) continue;
+
+                AGridCell* Neighbor = GetCell(NX, NY);
+                if (Neighbor && Neighbor->ElevationLevel == 0)
+                {
+                    // Il vicino è acqua — lo trasformiamo in piano per creare un ponte
+                    Neighbor->ElevationLevel = 1;
+                    Neighbor->CellType = ECellType::Plain;
+                    Neighbor->UpdateVisualColor();
+                    Visited[NX + NY * GridWidth] = true;
+                    FixedCells++;
+                    break;
+                }
+            }
+        }
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Connectivity check: %d cells fixed"), FixedCells);
 }

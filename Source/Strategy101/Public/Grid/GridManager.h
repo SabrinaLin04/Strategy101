@@ -64,6 +64,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid")
     bool IsValidCoord(int32 X, int32 Y) const;
 
+    //verifica che tutte le celle calpestabili sono connesse
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void EnsureConnectivity();
+
     /**
      * conversione griglia per UE
      * @param ElevationLevel - livello elevazione per l'offset Z
@@ -98,4 +102,6 @@ protected:
 
     //offset Y casuale
     float NoiseOffsetY;
+
+    bool IsCellWalkable(int32 X, int32 Y) const;
 };
