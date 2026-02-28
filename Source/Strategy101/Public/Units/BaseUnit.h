@@ -2,7 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Units/Attackable.h"
+#include "Units/Movable.h"
 #include "BaseUnit.generated.h"
+
 
 UENUM(BlueprintType)
 enum class EAttackType : uint8
@@ -19,7 +22,7 @@ enum class EOwner : uint8
 };
 
 UCLASS(Abstract)  // Abstract: non può essere istanziata direttamente
-class STRATEGY101_API ABaseUnit : public AActor
+class STRATEGY101_API ABaseUnit : public AActor, public IAttackable, public IMovable 
 {
     GENERATED_BODY()
 
@@ -91,6 +94,25 @@ public:
     void ResetTurnState();
 
     /** Ritorna true se l'unità è ancora viva */
+    bool IsAlive() const;
+
+// --- IAttackable ---
+    virtual int32 PerformAttack_Implementation(AActor* Target) override;
+    virtual bool ReceiveDamage_Implementation(int32 DamageAmount) override;
+    virtual bool IsTargetInRange_Implementation(AActor* Target) override;
+    virtual int32 GetCounterAttackDamage_Implementation() override;
+
+    // --- IMovable ---
+    virtual bool MoveTo_Implementation(int32 DestX, int32 DestY) override;
+    virtual TArray<FVector2D> GetReachableCells_Implementation() override;
+    virtual int32 GetMovementCost_Implementation(int32 FromElevation, int32 ToElevation) override;
+    virtual bool IsCellWalkable_Implementation(int32 GridX, int32 GridY) override;
+
+    // --- metodi esistenti rimangono ---
+    virtual int32 RollDamage() const;
+    virtual bool TakeDamage_Unit(int32 DamageAmount);
+    virtual void Respawn();
+    void ResetTurnState();
     bool IsAlive() const;
 
 protected:
