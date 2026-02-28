@@ -108,13 +108,6 @@ public:
     virtual int32 GetMovementCost_Implementation(int32 FromElevation, int32 ToElevation) override;
     virtual bool IsCellWalkable_Implementation(int32 GridX, int32 GridY) override;
 
-    // --- metodi esistenti rimangono ---
-    virtual int32 RollDamage() const;
-    virtual bool TakeDamage_Unit(int32 DamageAmount);
-    virtual void Respawn();
-    void ResetTurnState();
-    bool IsAlive() const;
-
 protected:
     virtual void BeginPlay() override;
 

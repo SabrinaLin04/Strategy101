@@ -93,7 +93,7 @@ int32 ABaseUnit::GetMovementCost_Implementation(int32 FromElevation, int32 ToEle
     return 1;
 }
 
-bool ABaseUnit::IsCellWalkable_Implementation(int32 GridX, int32 GridY)
+bool ABaseUnit::IsCellWalkable_Implementation(int32 InGridX, int32 InGridY)
 {
     // Placeholder — logica completa al Giorno 16
     return true;
