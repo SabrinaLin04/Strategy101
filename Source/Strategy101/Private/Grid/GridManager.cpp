@@ -11,7 +11,7 @@ AGridManager::AGridManager()
     CellSize = 100.f;
     NoiseSeed = 0;
     NoiseScale = 0.1f;
-    WaterThreshold = 0.3f;
+    WaterThreshold = 0.15f;
     MaxHeightOffset = 50.f;
     NoiseOffsetX = 0.f;
     NoiseOffsetY = 0.f;
@@ -39,6 +39,21 @@ void AGridManager::GenerateGrid()
 
     NoiseOffsetX = FMath::RandRange(0.f, 10000.f);
     NoiseOffsetY = FMath::RandRange(0.f, 10000.f);
+
+    //pre-calcola il range reale del noise per garantire tutti i 5 livelli
+    MinNoiseValue = FLT_MAX;
+    MaxNoiseValue = -FLT_MAX;
+    for (int32 Y = 0; Y < GridHeight; Y++)
+    {
+        for (int32 X = 0; X < GridWidth; X++)
+        {
+            float NX = (X + NoiseOffsetX) * NoiseScale;
+            float NY = (Y + NoiseOffsetY) * NoiseScale;
+            float Val = (FMath::PerlinNoise2D(FVector2D(NX, NY)) + 1.f) * 0.5f;
+            MinNoiseValue = FMath::Min(MinNoiseValue, Val);
+            MaxNoiseValue = FMath::Max(MaxNoiseValue, Val);
+        }
+    }
 
     //prealloco array
     Cells.SetNum(GridWidth * GridHeight);
@@ -88,6 +103,7 @@ void AGridManager::GenerateGrid()
 
     //verifica connettività e corregge eventuali isole
     EnsureConnectivity();
+    PlaceTowers();
 
     UE_LOG(LogTemp, Warning, TEXT("Grid generated: %d x %d cells"), GridWidth, GridHeight);
 }
@@ -96,21 +112,20 @@ int32 AGridManager::CalculateElevation(int32 X, int32 Y) const
 {
     float NX = (X + NoiseOffsetX) * NoiseScale;
     float NY = (Y + NoiseOffsetY) * NoiseScale;
+    float NoiseValue = (FMath::PerlinNoise2D(FVector2D(NX, NY)) + 1.f) * 0.5f;
 
-    float NoiseValue = FMath::PerlinNoise2D(FVector2D(NX, NY));
-    float Normalized = (NoiseValue + 1.f) * 0.5f;
+    // Normalizza rispetto al range reale della mappa — garantisce tutti i livelli
+    float Range = MaxNoiseValue - MinNoiseValue;
+    if (Range < KINDA_SMALL_NUMBER) return 1;
 
-    // Applica soglia acqua
-    if (Normalized < WaterThreshold)
-    {
-        return 0;
-    }
+    float Normalized = (NoiseValue - MinNoiseValue) / Range;
 
-    //rimappa il range [WaterThreshold, 1] in [1, 4]
+    // Applica soglia acqua sul valore normalizzato
+    if (Normalized < WaterThreshold) return 0;
+
+    // Rimappa in livelli 1-4
     float Remapped = (Normalized - WaterThreshold) / (1.f - WaterThreshold);
-    int32 Level = FMath::Clamp(FMath::FloorToInt(Remapped * 4.f) + 1, 1, 4);
-
-    return Level;
+    return FMath::Clamp(FMath::FloorToInt(Remapped * 4.f) + 1, 1, 4);
 }
 
 AGridCell* AGridManager::GetCell(int32 X, int32 Y) const
@@ -242,4 +257,49 @@ void AGridManager::EnsureConnectivity()
     }
 
     UE_LOG(LogTemp, Warning, TEXT("Connectivity check: %d cells fixed"), FixedCells);
+}
+
+void AGridManager::PlaceTowers()
+{
+    TArray<FIntPoint> IdealPositions = {
+        FIntPoint(12, 12),
+        FIntPoint(6, 10),
+        FIntPoint(14, 18)
+    };
+
+    TSubclassOf<ATower> ClassToSpawn;
+    if (TowerClass) ClassToSpawn = TowerClass;
+    else ClassToSpawn = ATower::StaticClass();
+
+    for (const FIntPoint& Ideal : IdealPositions)
+    {
+        AGridCell* Cell = GetCell(Ideal.X, Ideal.Y);
+        if (!Cell) continue;
+
+        // Se la cella ideale è acqua o occupata, convertila in piano
+        if (Cell->ElevationLevel == 0 || Cell->bIsOccupied)
+        {
+            Cell->ElevationLevel = 1;
+            Cell->CellType = ECellType::Plain;
+            Cell->UpdateVisualColor();
+        }
+
+        FVector WorldPos = GridToWorld(Ideal.X, Ideal.Y, Cell->ElevationLevel);
+        WorldPos.Z += 10.f;
+
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Owner = this;
+
+        ATower* NewTower = GetWorld()->SpawnActor<ATower>(
+            ClassToSpawn, WorldPos, FRotator::ZeroRotator, SpawnParams);
+
+        if (NewTower)
+        {
+            NewTower->GridX = Ideal.X;
+            NewTower->GridY = Ideal.Y;
+            Cell->bIsOccupied = true;
+            Towers.Add(NewTower);
+            UE_LOG(LogTemp, Warning, TEXT("Tower placed at: (%d, %d)"), Ideal.X, Ideal.Y);
+        }
+    }
 }

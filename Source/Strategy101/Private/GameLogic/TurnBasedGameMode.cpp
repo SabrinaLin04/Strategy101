@@ -28,7 +28,7 @@ void ATurnBasedGameMode::BeginPlay()
         UE_LOG(LogTemp, Warning, TEXT("Found camera at: %s"), *Cam->GetActorLocation().ToString());
 
         // Forza rotazione verso il basso
-        Cam->SetActorRotation(FRotator(-90.f, 0.f, 0.f));
+        Cam->SetActorRotation(FRotator(-90.f, 180.f, 0.f));
 
         FViewTargetTransitionParams Params;
         Params.BlendTime = 0.f;

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Grid/GridCell.h"
+#include "Grid/Tower.h"
 #include "GridManager.generated.h"
 
 UCLASS()
@@ -89,6 +90,19 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void ClearGrid();
 
+    /** Classe Blueprint della torre da spawnare */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Config")
+    TSubclassOf<ATower> TowerClass;
+
+    /** Array delle 3 torri spawnate */
+    UPROPERTY(BlueprintReadOnly, Category = "Grid")
+    TArray<ATower*> Towers;
+
+    /** Spawna le 3 torri con algoritmo simmetrico adattivo */
+    UFUNCTION(BlueprintCallable, Category = "Grid")
+    void PlaceTowers();
+
+
 protected:
     //calcola il livello di elevazione per la cella (X, Y) usando Perlin Noise.
     int32 CalculateElevation(int32 X, int32 Y) const;
@@ -102,6 +116,10 @@ protected:
 
     //offset Y casuale
     float NoiseOffsetY;
+
+    float MinNoiseValue;
+
+    float MaxNoiseValue;
 
     bool IsCellWalkable(int32 X, int32 Y) const;
 };
