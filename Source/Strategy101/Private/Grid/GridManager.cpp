@@ -20,7 +20,6 @@ AGridManager::AGridManager()
 void AGridManager::BeginPlay()
 {
     Super::BeginPlay();
-    GenerateGrid();
 }
 
 void AGridManager::GenerateGrid()
@@ -102,8 +101,9 @@ void AGridManager::GenerateGrid()
     }
 
     //verifica connettività e corregge eventuali isole
-    EnsureConnectivity();
     PlaceTowers();
+    EnsureConnectivity();
+    
 
     UE_LOG(LogTemp, Warning, TEXT("Grid generated: %d x %d cells"), GridWidth, GridHeight);
 }
@@ -263,25 +263,54 @@ void AGridManager::PlaceTowers()
 {
     TArray<FIntPoint> IdealPositions = {
         FIntPoint(12, 12),
-        FIntPoint(6, 10),
+        FIntPoint(6,  10),
         FIntPoint(14, 18)
     };
 
-    TSubclassOf<ATower> ClassToSpawn;
-    if (TowerClass) ClassToSpawn = TowerClass;
-    else ClassToSpawn = ATower::StaticClass();
+    TSubclassOf<ATower> ClassToSpawn = TowerClass ? TowerClass : TSubclassOf<ATower>(ATower::StaticClass());
+
+    const int32 DX[] = { 0,  0, -1, 1 };
+    const int32 DY[] = { -1, 1,  0, 0 };
 
     for (const FIntPoint& Ideal : IdealPositions)
     {
         AGridCell* Cell = GetCell(Ideal.X, Ideal.Y);
         if (!Cell) continue;
 
-        // Se la cella ideale è acqua o occupata, convertila in piano
-        if (Cell->ElevationLevel == 0 || Cell->bIsOccupied)
+        // Converte la cella della torre in piano se è acqua
+        if (Cell->ElevationLevel == 0)
         {
             Cell->ElevationLevel = 1;
             Cell->CellType = ECellType::Plain;
             Cell->UpdateVisualColor();
+        }
+
+        // Garantisce almeno un vicino calpestabile connesso alla mappa principale
+        bool bHasWalkableNeighbor = false;
+        for (int32 i = 0; i < 4; i++)
+        {
+            AGridCell* Neighbor = GetCell(Ideal.X + DX[i], Ideal.Y + DY[i]);
+            if (Neighbor && Neighbor->ElevationLevel > 0)
+            {
+                bHasWalkableNeighbor = true;
+                break;
+            }
+        }
+
+        // Se tutti i vicini sono acqua, ne converte uno in piano per creare il ponte
+        if (!bHasWalkableNeighbor)
+        {
+            for (int32 i = 0; i < 4; i++)
+            {
+                AGridCell* Neighbor = GetCell(Ideal.X + DX[i], Ideal.Y + DY[i]);
+                if (Neighbor)
+                {
+                    Neighbor->ElevationLevel = 1;
+                    Neighbor->CellType = ECellType::Plain;
+                    Neighbor->UpdateVisualColor();
+                    break;
+                }
+            }
         }
 
         FVector WorldPos = GridToWorld(Ideal.X, Ideal.Y, Cell->ElevationLevel);
@@ -289,7 +318,6 @@ void AGridManager::PlaceTowers()
 
         FActorSpawnParameters SpawnParams;
         SpawnParams.Owner = this;
-
         ATower* NewTower = GetWorld()->SpawnActor<ATower>(
             ClassToSpawn, WorldPos, FRotator::ZeroRotator, SpawnParams);
 
@@ -299,7 +327,6 @@ void AGridManager::PlaceTowers()
             NewTower->GridY = Ideal.Y;
             Cell->bIsOccupied = true;
             Towers.Add(NewTower);
-            UE_LOG(LogTemp, Warning, TEXT("Tower placed at: (%d, %d)"), Ideal.X, Ideal.Y);
         }
     }
 }

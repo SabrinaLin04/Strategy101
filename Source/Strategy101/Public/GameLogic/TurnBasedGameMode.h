@@ -6,6 +6,7 @@
 #include "Units/BaseUnit.h"
 #include "Camera/CameraActor.h"
 #include "EngineUtils.h"
+#include "Blueprint/UserWidget.h"
 #include "TurnBasedGameMode.generated.h"
 
 UCLASS()
@@ -53,6 +54,9 @@ public:
 
     /** Ritorna il GameState castato al tipo corretto */
     ATurnBasedGameState* GetTurnGameState() const;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UUserWidget> MapConfigWidgetClass;
 
 protected:
     /** Numero di unità piazzate finora (max 4: 2 human + 2 AI) */

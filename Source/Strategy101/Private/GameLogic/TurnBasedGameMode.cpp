@@ -2,6 +2,9 @@
 #include "GameLogic/TurnBasedGameState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Math/UnrealMathUtility.h"
+#include "UI/MapConfigWidget.h"
+#include "Grid/GridManager.h"
+#include "EngineUtils.h"
 
 ATurnBasedGameMode::ATurnBasedGameMode()
 {
@@ -19,24 +22,36 @@ void ATurnBasedGameMode::BeginPlay()
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (!PC) return;
 
-    // Disabilita la gestione automatica della camera da parte del controller
     PC->bAutoManageActiveCameraTarget = false;
 
+    // Imposta la camera top-down
     for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
     {
-        ACameraActor* Cam = *It;
-        UE_LOG(LogTemp, Warning, TEXT("Found camera at: %s"), *Cam->GetActorLocation().ToString());
-
-        // Forza rotazione verso il basso
-        Cam->SetActorRotation(FRotator(-90.f, 180.f, 0.f));
-
         FViewTargetTransitionParams Params;
         Params.BlendTime = 0.f;
-        PC->SetViewTarget(Cam, Params);
+        PC->SetViewTarget(*It, Params);
         break;
     }
 
-    PerformCoinFlip();
+    // Trova il GridManager nella scena
+    AGridManager* GM = nullptr;
+    for (TActorIterator<AGridManager> It(GetWorld()); It; ++It)
+    {
+        GM = *It;
+        break;
+    }
+
+    if (!MapConfigWidgetClass || !GM) return;
+
+    // Crea e mostra il widget — la generazione parte quando il player preme Start
+    UMapConfigWidget* Widget = CreateWidget<UMapConfigWidget>(PC, MapConfigWidgetClass);
+    if (Widget)
+    {
+        Widget->GridManager = GM;
+        Widget->AddToViewport();
+        PC->bShowMouseCursor = true;
+        PC->SetInputMode(FInputModeUIOnly());
+    }
 }
 void ATurnBasedGameMode::PerformCoinFlip()
 {

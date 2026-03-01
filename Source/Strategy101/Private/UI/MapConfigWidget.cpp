@@ -1,26 +1,18 @@
-#include "MapConfigWidget.h"
-#include "Grid/GridManager.h"
+#include "UI/MapConfigWidget.h"
 
-void UMapConfigWidget::OnStartGame(int32 Seed, float WaterThresh, float NoiseScaleVal)
-{
-    SelectedSeed = Seed;
-    SelectedWaterThreshold = WaterThresh;
-    SelectedNoiseScale = NoiseScaleVal;
-    ApplyAndClose();
-}
-
-void UMapConfigWidget::ApplyAndClose()
+void UMapConfigWidget::OnStartGame()
 {
     if (!GridManager) return;
 
-    // Applica i parametri scelti dal player al GridManager
-    GridManager->NoiseSeed = SelectedSeed;
-    GridManager->WaterThreshold = SelectedWaterThreshold;
-    GridManager->NoiseScale = SelectedNoiseScale;
-
-    // Genera la mappa con i nuovi parametri
+    // Genera la mappa con seed random e rimuove il widget
+    GridManager->NoiseSeed = 0;
     GridManager->GenerateGrid();
-
-    // Rimuove il widget dallo schermo
     RemoveFromParent();
+
+    APlayerController* PC = GetOwningPlayer();
+    if (!PC) return;
+    PC->SetInputMode(FInputModeGameOnly());
+
+    ATurnBasedGameMode* GameMode = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+    if (GameMode) GameMode->PerformCoinFlip();
 }
