@@ -15,7 +15,13 @@ public class Strategy101 : ModuleRules
             "InputCore"
         });
 
-        PrivateDependencyModuleNames.AddRange(new string[] { });
+        PublicDependencyModuleNames.AddRange(new string[] {
+            "Core",
+            "CoreUObject",
+            "Engine",
+            "InputCore",
+            "UMG"
+        });
 
         PublicIncludePaths.AddRange(new string[] {
             "Strategy101/Public",
