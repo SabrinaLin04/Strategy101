@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "Blueprint/UserWidget.h"
 #include "Grid/GridManager.h"
+#include "UI/CoinFlipWidget.h"
 #include "TurnBasedGameMode.generated.h"
 
 UCLASS()
@@ -56,6 +57,9 @@ public:
     // Classe del widget di avvio
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UUserWidget> MapConfigWidgetClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UCoinFlipWidget> CoinFlipWidgetClass;
 
 protected:
     // Numero unità piazzate per ogni giocatore

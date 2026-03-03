@@ -64,8 +64,20 @@ void ATurnBasedGameMode::PerformCoinFlip()
     GS->CurrentPhase = EGamePhase::Placement;
     PlacementTurn = GS->CoinFlipWinner;
 
-    UE_LOG(LogTemp, Warning, TEXT("Coin flip: %s wins!"),
-        bHumanWins ? TEXT("Human") : TEXT("AI"));
+    FString Winner = bHumanWins ? TEXT("Human") : TEXT("AI");
+    UE_LOG(LogTemp, Warning, TEXT("Coin flip: %s wins!"), *Winner);
+
+    // Mostra il widget con il risultato
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC && CoinFlipWidgetClass)
+    {
+        UCoinFlipWidget* Widget = CreateWidget<UCoinFlipWidget>(PC, CoinFlipWidgetClass);
+        if (Widget)
+        {
+            Widget->AddToViewport();
+            Widget->ShowResult(Winner);
+        }
+    }
 
     if (PlacementTurn == ETurnOwner::AI)
         PerformAIPlacement();
