@@ -4,11 +4,15 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameLogic/TurnBasedGameState.h"
 #include "Units/BaseUnit.h"
+#include "Units/Sniper.h"
+#include "Units/Brawler.h"
 #include "Camera/CameraActor.h"
 #include "EngineUtils.h"
 #include "Blueprint/UserWidget.h"
 #include "Grid/GridManager.h"
 #include "UI/CoinFlipWidget.h"
+#include "UI/PlacementWidget.h"
+#include "Grid/GridCell.h"
 #include "TurnBasedGameMode.generated.h"
 
 UCLASS()
@@ -51,6 +55,8 @@ public:
     // Controlla la condizione di vittoria e termina la partita se necessario
     void CheckGameOver();
 
+    void ShowPlacementWidget();
+
     // Ritorna il GameState castato al tipo corretto
     ATurnBasedGameState* GetTurnGameState() const;
 
@@ -60,6 +66,18 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UCoinFlipWidget> CoinFlipWidgetClass;
+
+    // Classe del widget di piazzamento
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UPlacementWidget> PlacementWidgetClass;
+
+    // Classe Blueprint dello Sniper da spawnare
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Units")
+    TSubclassOf<ASniper> SniperClass;
+
+    // Classe Blueprint del Brawler da spawnare
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Units")
+    TSubclassOf<ABrawler> BrawlerClass;
 
 protected:
     // Numero unità piazzate per ogni giocatore
@@ -71,4 +89,19 @@ protected:
 
     // Riferimento al GridManager nella scena
     AGridManager* GridManagerRef;
+
+    // Riferimento al widget di piazzamento attivo
+    UPlacementWidget* PlacementWidgetRef;
+
+    // Celle evidenziate nella zona di schieramento
+    TArray<AGridCell*> HighlightedCells;
+
+    // Evidenzia le celle valide per il piazzamento Human (Y=0,1,2)
+    void HighlightHumanPlacementZone();
+
+    // Rimuove l'evidenziazione
+    void ClearHighlight();
+
+    // Spawna l'unità corretta nella cella cliccata
+    void SpawnUnitAtCell(AGridCell* Cell);
 };

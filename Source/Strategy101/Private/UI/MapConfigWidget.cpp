@@ -1,4 +1,5 @@
 #include "UI/MapConfigWidget.h"
+#include "GameLogic/TurnBasedGameMode.h"
 
 void UMapConfigWidget::OnStartGame()
 {

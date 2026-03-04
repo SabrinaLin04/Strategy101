@@ -1,5 +1,6 @@
 #include "GridCell.h"
 #include "UObject/ConstructorHelpers.h"
+#include "GameLogic/TurnBasedGameMode.h"
 
 AGridCell::AGridCell()
 {
@@ -21,6 +22,20 @@ void AGridCell::BeginPlay()
 {
     Super::BeginPlay();
     UpdateVisualColor();
+
+    // Abilita i click sulla mesh
+    if (CellMesh)
+    {
+        CellMesh->SetGenerateOverlapEvents(false);
+        EnableInput(GetWorld()->GetFirstPlayerController());
+    }
+    OnClicked.AddDynamic(this, &AGridCell::OnCellClicked);
+}
+
+void AGridCell::OnCellClicked(AActor* TouchedActor, FKey ButtonPressed)
+{
+    ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+    if (GM) GM->OnHumanPlacementCellClicked(GridX, GridY);
 }
 
 void AGridCell::UpdateVisualColor()

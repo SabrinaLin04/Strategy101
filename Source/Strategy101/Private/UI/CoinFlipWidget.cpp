@@ -8,10 +8,11 @@ void UCoinFlipWidget::NativeConstruct()
 
 void UCoinFlipWidget::ShowResult(const FString& WinnerName)
 {
+    // Cerca il TextBlock per nome invece di BindWidget
+    UTextBlock* ResultText = Cast<UTextBlock>(GetWidgetFromName(TEXT("ResultText")));
     if (ResultText)
         ResultText->SetText(FText::FromString(FString::Printf(TEXT("%s goes first!"), *WinnerName)));
 
-    // Nasconde il widget dopo 3 secondi
     GetWorld()->GetTimerManager().SetTimer(HideTimer, this, &UCoinFlipWidget::HideWidget, 3.f, false);
 }
 

@@ -3,6 +3,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "UI/MapConfigWidget.h"
 #include "Grid/GridManager.h"
+#include "Units/Sniper.h"
+#include "Units/Brawler.h"
+#include "UI/PlacementWidget.h"
 #include "EngineUtils.h"
 
 ATurnBasedGameMode::ATurnBasedGameMode()
@@ -48,6 +51,7 @@ void ATurnBasedGameMode::BeginPlay()
                 Widget->GridManager = GridManagerRef;
                 Widget->AddToViewport();
                 PC->bShowMouseCursor = true;
+                PC->bEnableClickEvents = true;
                 PC->SetInputMode(FInputModeUIOnly());
             }
         });
@@ -67,20 +71,27 @@ void ATurnBasedGameMode::PerformCoinFlip()
     FString Winner = bHumanWins ? TEXT("Human") : TEXT("AI");
     UE_LOG(LogTemp, Warning, TEXT("Coin flip: %s wins!"), *Winner);
 
-    // Mostra il widget con il risultato
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (PC && CoinFlipWidgetClass)
+    if (!PC || !CoinFlipWidgetClass) return;
+
+    UCoinFlipWidget* Widget = CreateWidget<UCoinFlipWidget>(PC, CoinFlipWidgetClass);
+    if (Widget)
     {
-        UCoinFlipWidget* Widget = CreateWidget<UCoinFlipWidget>(PC, CoinFlipWidgetClass);
-        if (Widget)
-        {
-            Widget->AddToViewport();
-            Widget->ShowResult(Winner);
-        }
+        Widget->AddToViewport();
+        Widget->ShowResult(Winner);
     }
 
-    if (PlacementTurn == ETurnOwner::AI)
-        PerformAIPlacement();
+    FTimerHandle PlacementTimer;
+    GetWorldTimerManager().SetTimer(PlacementTimer, [this]()
+        {
+            if (PlacementTurn == ETurnOwner::Human)
+            {
+                HighlightHumanPlacementZone();
+                ShowPlacementWidget();
+            }
+            else
+                PerformAIPlacement();
+        }, 3.f, false);
 }
 
 void ATurnBasedGameMode::OnHumanPlacementCellClicked(int32 X, int32 Y)
@@ -91,27 +102,16 @@ void ATurnBasedGameMode::OnHumanPlacementCellClicked(int32 X, int32 Y)
     if (!GS || GS->CurrentPhase != EGamePhase::Placement) return;
     if (GS->CurrentTurn != ETurnOwner::Human) return;
 
-    // Zone valide per Human: Y = 0, 1, 2
     if (Y < 0 || Y > 2)
     {
-        UE_LOG(LogTemp, Warning, TEXT("Invalid placement zone (Y must be 0-2)"));
+        UE_LOG(LogTemp, Warning, TEXT("Invalid zone (Y must be 0-2)"));
         return;
     }
 
     AGridCell* Cell = GridManagerRef->GetCell(X, Y);
-    if (!Cell || Cell->ElevationLevel == 0 || Cell->bIsOccupied)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Cell (%d,%d) not available"), X, Y);
-        return;
-    }
+    if (!Cell || Cell->ElevationLevel == 0 || Cell->bIsOccupied) return;
 
-    // Lo spawn effettivo dell'unità sarà al Giorno 12
-    Cell->bIsOccupied = true;
-    HumanUnitsPlaced++;
-
-    UE_LOG(LogTemp, Warning, TEXT("Human placed unit %d at (%d,%d)"), HumanUnitsPlaced, X, Y);
-
-    AdvancePlacementStep();
+    SpawnUnitAtCell(Cell);
 }
 
 void ATurnBasedGameMode::PerformAIPlacement()
@@ -142,6 +142,7 @@ void ATurnBasedGameMode::AdvancePlacementStep()
 {
     if ((HumanUnitsPlaced + AIUnitsPlaced) >= 4)
     {
+        if (PlacementWidgetRef) PlacementWidgetRef->HidePlacementPrompt();
         StartGamePhase();
         return;
     }
@@ -153,6 +154,102 @@ void ATurnBasedGameMode::AdvancePlacementStep()
 
     if (PlacementTurn == ETurnOwner::AI)
         PerformAIPlacement();
+    else
+    {
+        HighlightHumanPlacementZone();
+        ShowPlacementWidget();
+    }
+}
+
+void ATurnBasedGameMode::HighlightHumanPlacementZone()
+{
+    if (!GridManagerRef) return;
+    ClearHighlight();
+
+    // Evidenzia celle valide in Y=0,1,2 non occupate e non acqua
+    for (int32 Y = 0; Y <= 2; Y++)
+    {
+        for (int32 X = 0; X < 25; X++)
+        {
+            AGridCell* Cell = GridManagerRef->GetCell(X, Y);
+            if (Cell && Cell->ElevationLevel > 0 && !Cell->bIsOccupied)
+            {
+                // Colore ciano per indicare cella disponibile
+                UMaterialInstanceDynamic* DynMat =
+                    Cell->GetCellMesh()->CreateAndSetMaterialInstanceDynamic(0);
+                if (DynMat)
+                    DynMat->SetVectorParameterValue(TEXT("BaseColor"),
+                        FLinearColor(0.f, 1.f, 1.f));
+                HighlightedCells.Add(Cell);
+            }
+        }
+    }
+}
+
+void ATurnBasedGameMode::ClearHighlight()
+{
+    // Ripristina il colore originale di ogni cella evidenziata
+    for (AGridCell* Cell : HighlightedCells)
+        if (Cell) Cell->UpdateVisualColor();
+    HighlightedCells.Empty();
+}
+
+void ATurnBasedGameMode::ShowPlacementWidget()
+{
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC || !PlacementWidgetClass) return;
+
+    if (!PlacementWidgetRef)
+    {
+        PlacementWidgetRef = CreateWidget<UPlacementWidget>(PC, PlacementWidgetClass);
+        if (PlacementWidgetRef) PlacementWidgetRef->AddToViewport();
+    }
+
+    // Prima unità = Sniper, seconda = Brawler
+    FString UnitName = (HumanUnitsPlaced == 0) ? TEXT("Sniper") : TEXT("Brawler");
+    if (PlacementWidgetRef) PlacementWidgetRef->ShowPlacementPrompt(UnitName);
+
+    PC->bShowMouseCursor = true;
+    PC->SetInputMode(FInputModeGameAndUI());
+}
+
+void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
+{
+    if (!Cell || !GridManagerRef) return;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    // Determina quale classe spawnare
+    TSubclassOf<ABaseUnit> ClassToSpawn = (HumanUnitsPlaced == 0)
+        ? TSubclassOf<ABaseUnit>(SniperClass)
+        : TSubclassOf<ABaseUnit>(BrawlerClass);
+
+    if (!ClassToSpawn) return;
+
+    FVector WorldPos = Cell->GetActorLocation();
+    WorldPos.Z += 60.f; // solleva l'unità sopra la cella
+
+    FActorSpawnParameters Params;
+    Params.Owner = this;
+    ABaseUnit* Unit = GetWorld()->SpawnActor<ABaseUnit>(ClassToSpawn, WorldPos, FRotator::ZeroRotator, Params);
+    if (!Unit) return;
+
+    // Inizializza l'unità
+    Unit->GridX = Cell->GridX;
+    Unit->GridY = Cell->GridY;
+    Unit->SpawnGridX = Cell->GridX;
+    Unit->SpawnGridY = Cell->GridY;
+    Unit->UnitOwner = EOwner::Human;
+    Cell->bIsOccupied = true;
+
+    GS->HumanUnits.Add(Unit);
+    HumanUnitsPlaced++;
+
+    UE_LOG(LogTemp, Warning, TEXT("Human spawned unit %d at (%d,%d)"), HumanUnitsPlaced, Cell->GridX, Cell->GridY);
+
+    ClearHighlight();
+    AdvancePlacementStep();
 }
 
 void ATurnBasedGameMode::StartGamePhase()
@@ -217,3 +314,4 @@ ATurnBasedGameState* ATurnBasedGameMode::GetTurnGameState() const
 {
     return GetGameState<ATurnBasedGameState>();
 }
+

@@ -1,20 +1,11 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
-
 using UnrealBuildTool;
-
 public class Strategy101 : ModuleRules
 {
     public Strategy101(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-
-        PublicDependencyModuleNames.AddRange(new string[] {
-            "Core",
-            "CoreUObject",
-            "Engine",
-            "InputCore"
-        });
-
+        bUseUnity = false; // disabilita unity build per ridurre picco di memoria
         PublicDependencyModuleNames.AddRange(new string[] {
             "Core",
             "CoreUObject",
@@ -22,7 +13,6 @@ public class Strategy101 : ModuleRules
             "InputCore",
             "UMG"
         });
-
         PublicIncludePaths.AddRange(new string[] {
             "Strategy101/Public",
             "Strategy101/Public/Grid",

@@ -2,7 +2,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+class ATurnBasedGameMode;
 #include "GridCell.generated.h"
+
 
 UENUM(BlueprintType)
 enum class ECellType : uint8
@@ -43,6 +45,12 @@ public:
 
     /** Imposta il colore della mesh in base al livello */
     void UpdateVisualColor();
+
+    // Getter per la mesh della cella (usato per l'highlight)
+    UStaticMeshComponent* GetCellMesh() const { return CellMesh; }
+
+    UFUNCTION()
+    void OnCellClicked(AActor* TouchedActor, FKey ButtonPressed);
 
 protected:
     virtual void BeginPlay() override;
