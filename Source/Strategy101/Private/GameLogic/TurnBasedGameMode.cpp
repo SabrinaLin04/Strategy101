@@ -130,10 +130,42 @@ void ATurnBasedGameMode::PerformAIPlacement()
     if (ValidCells.IsEmpty()) return;
 
     AGridCell* Chosen = ValidCells[FMath::RandRange(0, ValidCells.Num() - 1)];
-    Chosen->bIsOccupied = true;
+    SpawnAIUnitAtCell(Chosen);
+}
+
+void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
+{
+    if (!Cell || !GridManagerRef) return;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    // Prima unità AI = Sniper, seconda = Brawler
+    TSubclassOf<ABaseUnit> ClassToSpawn = (AIUnitsPlaced == 0)
+        ? TSubclassOf<ABaseUnit>(SniperClass)
+        : TSubclassOf<ABaseUnit>(BrawlerClass);
+
+    if (!ClassToSpawn) return;
+
+    FVector WorldPos = Cell->GetActorLocation();
+    WorldPos.Z += 60.f;
+
+    FActorSpawnParameters Params;
+    Params.Owner = this;
+    ABaseUnit* Unit = GetWorld()->SpawnActor<ABaseUnit>(ClassToSpawn, WorldPos, FRotator::ZeroRotator, Params);
+    if (!Unit) return;
+
+    Unit->GridX = Cell->GridX;
+    Unit->GridY = Cell->GridY;
+    Unit->SpawnGridX = Cell->GridX;
+    Unit->SpawnGridY = Cell->GridY;
+    Unit->UnitOwner = EOwner::AI;
+    Cell->bIsOccupied = true;
+
+    GS->AIUnits.Add(Unit);
     AIUnitsPlaced++;
 
-    UE_LOG(LogTemp, Warning, TEXT("AI placed unit %d at (%d,%d)"), AIUnitsPlaced, Chosen->GridX, Chosen->GridY);
+    UE_LOG(LogTemp, Warning, TEXT("AI spawned unit %d at (%d,%d)"), AIUnitsPlaced, Cell->GridX, Cell->GridY);
 
     AdvancePlacementStep();
 }

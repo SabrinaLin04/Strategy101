@@ -35,6 +35,8 @@ public:
     // Fa piazzare all'AI la sua prossima unità automaticamente
     void PerformAIPlacement();
 
+    void SpawnAIUnitAtCell(AGridCell* Cell);
+
     // Avanza al prossimo step del piazzamento (alterna Human/AI)
     void AdvancePlacementStep();
 
