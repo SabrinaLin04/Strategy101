@@ -31,6 +31,9 @@ public:
 
     // --- Statistiche unità ---
 
+    // Imposta il colore della mesh in base al proprietario
+    void SetOwnerColor();
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit|Stats")
     int32 MaxMovement;
 

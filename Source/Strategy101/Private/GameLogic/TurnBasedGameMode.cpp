@@ -94,6 +94,32 @@ void ATurnBasedGameMode::PerformCoinFlip()
         }, 3.f, false);
 }
 
+void ATurnBasedGameMode::HighlightHumanPlacementZone()
+{
+    if (!GridManagerRef) return;
+    ClearHighlight();
+
+    // Evidenzia celle valide in Y=0,1,2 non occupate e non acqua
+    for (int32 Y = 0; Y <= 2; Y++)
+    {
+        for (int32 X = 0; X < 25; X++)
+        {
+            AGridCell* Cell = GridManagerRef->GetCell(X, Y);
+            if (Cell && Cell->ElevationLevel > 0 && !Cell->bIsOccupied)
+            {
+                // Colore ciano per indicare cella disponibile
+                UMaterialInstanceDynamic* DynMat =
+                    Cell->GetCellMesh()->CreateAndSetMaterialInstanceDynamic(0);
+                if (DynMat)
+                    DynMat->SetVectorParameterValue(TEXT("BaseColor"),
+                        FLinearColor(0.f, 1.f, 1.f));
+                HighlightedCells.Add(Cell);
+            }
+        }
+    }
+}
+
+
 void ATurnBasedGameMode::OnHumanPlacementCellClicked(int32 X, int32 Y)
 {
     if (!GridManagerRef) return;
@@ -112,6 +138,73 @@ void ATurnBasedGameMode::OnHumanPlacementCellClicked(int32 X, int32 Y)
     if (!Cell || Cell->ElevationLevel == 0 || Cell->bIsOccupied) return;
 
     SpawnUnitAtCell(Cell);
+}
+
+void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
+{
+    if (!Cell || !GridManagerRef) return;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    // Determina quale classe spawnare
+    TSubclassOf<ABaseUnit> ClassToSpawn = (HumanUnitsPlaced == 0)
+        ? TSubclassOf<ABaseUnit>(SniperClass)
+        : TSubclassOf<ABaseUnit>(BrawlerClass);
+
+    if (!ClassToSpawn) return;
+
+    FVector WorldPos = Cell->GetActorLocation();
+    WorldPos.Z += 60.f; // solleva l'unità sopra la cella
+
+    FActorSpawnParameters Params;
+    Params.Owner = this;
+    ABaseUnit* Unit = GetWorld()->SpawnActor<ABaseUnit>(ClassToSpawn, WorldPos, FRotator::ZeroRotator, Params);
+    if (!Unit) return;
+
+    // Inizializza l'unità
+    Unit->GridX = Cell->GridX;
+    Unit->GridY = Cell->GridY;
+    Unit->SpawnGridX = Cell->GridX;
+    Unit->SpawnGridY = Cell->GridY;
+    Unit->UnitOwner = EOwner::Human;
+    Unit->SetOwnerColor();
+    Cell->bIsOccupied = true;
+
+    GS->HumanUnits.Add(Unit);
+    HumanUnitsPlaced++;
+
+    UE_LOG(LogTemp, Warning, TEXT("Human spawned unit %d at (%d,%d)"), HumanUnitsPlaced, Cell->GridX, Cell->GridY);
+
+    ClearHighlight();
+    AdvancePlacementStep();
+}
+
+void ATurnBasedGameMode::ClearHighlight()
+{
+    // Ripristina il colore originale di ogni cella evidenziata
+    for (AGridCell* Cell : HighlightedCells)
+        if (Cell) Cell->UpdateVisualColor();
+    HighlightedCells.Empty();
+}
+
+void ATurnBasedGameMode::ShowPlacementWidget()
+{
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (!PC || !PlacementWidgetClass) return;
+
+    if (!PlacementWidgetRef)
+    {
+        PlacementWidgetRef = CreateWidget<UPlacementWidget>(PC, PlacementWidgetClass);
+        if (PlacementWidgetRef) PlacementWidgetRef->AddToViewport();
+    }
+
+    // Prima unità = Sniper, seconda = Brawler
+    FString UnitName = (HumanUnitsPlaced == 0) ? TEXT("Sniper") : TEXT("Brawler");
+    if (PlacementWidgetRef) PlacementWidgetRef->ShowPlacementPrompt(UnitName);
+
+    PC->bShowMouseCursor = true;
+    PC->SetInputMode(FInputModeGameAndUI());
 }
 
 void ATurnBasedGameMode::PerformAIPlacement()
@@ -160,6 +253,7 @@ void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
     Unit->SpawnGridX = Cell->GridX;
     Unit->SpawnGridY = Cell->GridY;
     Unit->UnitOwner = EOwner::AI;
+    Unit->SetOwnerColor();
     Cell->bIsOccupied = true;
 
     GS->AIUnits.Add(Unit);
@@ -191,97 +285,6 @@ void ATurnBasedGameMode::AdvancePlacementStep()
         HighlightHumanPlacementZone();
         ShowPlacementWidget();
     }
-}
-
-void ATurnBasedGameMode::HighlightHumanPlacementZone()
-{
-    if (!GridManagerRef) return;
-    ClearHighlight();
-
-    // Evidenzia celle valide in Y=0,1,2 non occupate e non acqua
-    for (int32 Y = 0; Y <= 2; Y++)
-    {
-        for (int32 X = 0; X < 25; X++)
-        {
-            AGridCell* Cell = GridManagerRef->GetCell(X, Y);
-            if (Cell && Cell->ElevationLevel > 0 && !Cell->bIsOccupied)
-            {
-                // Colore ciano per indicare cella disponibile
-                UMaterialInstanceDynamic* DynMat =
-                    Cell->GetCellMesh()->CreateAndSetMaterialInstanceDynamic(0);
-                if (DynMat)
-                    DynMat->SetVectorParameterValue(TEXT("BaseColor"),
-                        FLinearColor(0.f, 1.f, 1.f));
-                HighlightedCells.Add(Cell);
-            }
-        }
-    }
-}
-
-void ATurnBasedGameMode::ClearHighlight()
-{
-    // Ripristina il colore originale di ogni cella evidenziata
-    for (AGridCell* Cell : HighlightedCells)
-        if (Cell) Cell->UpdateVisualColor();
-    HighlightedCells.Empty();
-}
-
-void ATurnBasedGameMode::ShowPlacementWidget()
-{
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC || !PlacementWidgetClass) return;
-
-    if (!PlacementWidgetRef)
-    {
-        PlacementWidgetRef = CreateWidget<UPlacementWidget>(PC, PlacementWidgetClass);
-        if (PlacementWidgetRef) PlacementWidgetRef->AddToViewport();
-    }
-
-    // Prima unità = Sniper, seconda = Brawler
-    FString UnitName = (HumanUnitsPlaced == 0) ? TEXT("Sniper") : TEXT("Brawler");
-    if (PlacementWidgetRef) PlacementWidgetRef->ShowPlacementPrompt(UnitName);
-
-    PC->bShowMouseCursor = true;
-    PC->SetInputMode(FInputModeGameAndUI());
-}
-
-void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
-{
-    if (!Cell || !GridManagerRef) return;
-
-    ATurnBasedGameState* GS = GetTurnGameState();
-    if (!GS) return;
-
-    // Determina quale classe spawnare
-    TSubclassOf<ABaseUnit> ClassToSpawn = (HumanUnitsPlaced == 0)
-        ? TSubclassOf<ABaseUnit>(SniperClass)
-        : TSubclassOf<ABaseUnit>(BrawlerClass);
-
-    if (!ClassToSpawn) return;
-
-    FVector WorldPos = Cell->GetActorLocation();
-    WorldPos.Z += 60.f; // solleva l'unità sopra la cella
-
-    FActorSpawnParameters Params;
-    Params.Owner = this;
-    ABaseUnit* Unit = GetWorld()->SpawnActor<ABaseUnit>(ClassToSpawn, WorldPos, FRotator::ZeroRotator, Params);
-    if (!Unit) return;
-
-    // Inizializza l'unità
-    Unit->GridX = Cell->GridX;
-    Unit->GridY = Cell->GridY;
-    Unit->SpawnGridX = Cell->GridX;
-    Unit->SpawnGridY = Cell->GridY;
-    Unit->UnitOwner = EOwner::Human;
-    Cell->bIsOccupied = true;
-
-    GS->HumanUnits.Add(Unit);
-    HumanUnitsPlaced++;
-
-    UE_LOG(LogTemp, Warning, TEXT("Human spawned unit %d at (%d,%d)"), HumanUnitsPlaced, Cell->GridX, Cell->GridY);
-
-    ClearHighlight();
-    AdvancePlacementStep();
 }
 
 void ATurnBasedGameMode::StartGamePhase()

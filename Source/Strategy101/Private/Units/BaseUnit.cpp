@@ -21,6 +21,18 @@ ABaseUnit::ABaseUnit()
     GridY = 0;
 }
 
+void ABaseUnit::SetOwnerColor()
+{
+    if (!UnitMesh) return;
+    UMaterialInstanceDynamic* DynMat = UnitMesh->CreateAndSetMaterialInstanceDynamic(0);
+    if (!DynMat) return;
+    // Blu per Human, rosso per AI
+    FLinearColor Color = (UnitOwner == EOwner::Human)
+        ? FLinearColor(0.f, 0.2f, 1.f)
+        : FLinearColor(1.f, 0.1f, 0.1f);
+    DynMat->SetVectorParameterValue(TEXT("BaseColor"), Color);
+}
+
 void ABaseUnit::BeginPlay()
 {
     Super::BeginPlay();
