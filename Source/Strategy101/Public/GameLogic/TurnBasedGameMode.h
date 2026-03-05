@@ -64,7 +64,7 @@ public:
 
     // Classe del widget di avvio
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
-    TSubclassOf<UUserWidget> MapConfigWidgetClass;
+    TSubclassOf<UUserWidget> ConfigWidgetClass;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UCoinFlipWidget> CoinFlipWidgetClass;

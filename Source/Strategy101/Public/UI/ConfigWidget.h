@@ -4,11 +4,11 @@
 #include "Blueprint/UserWidget.h"
 #include "Grid/GridManager.h"
 #include "GameLogic/TurnBasedGameMode.h"
-#include "MapConfigWidget.generated.h"
+#include "ConfigWidget.generated.h"
 
 // Widget di avvio partita
 UCLASS()
-class STRATEGY101_API UMapConfigWidget : public UUserWidget
+class STRATEGY101_API UConfigWidget : public UUserWidget
 {
     GENERATED_BODY()
 

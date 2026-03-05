@@ -1,7 +1,7 @@
 #include "GameLogic/TurnBasedGameMode.h"
 #include "GameLogic/TurnBasedGameState.h"
 #include "Kismet/GameplayStatics.h"
-#include "UI/MapConfigWidget.h"
+#include "UI/ConfigWidget.h"
 #include "Grid/GridManager.h"
 #include "Units/Sniper.h"
 #include "Units/Brawler.h"
@@ -43,9 +43,9 @@ void ATurnBasedGameMode::BeginPlay()
                 break;
             }
 
-            if (!MapConfigWidgetClass || !GridManagerRef) return;
+            if (!ConfigWidgetClass || !GridManagerRef) return;
 
-            UMapConfigWidget* Widget = CreateWidget<UMapConfigWidget>(PC, MapConfigWidgetClass);
+            UConfigWidget* Widget = CreateWidget<UConfigWidget>(PC, ConfigWidgetClass);
             if (Widget)
             {
                 Widget->GridManager = GridManagerRef;

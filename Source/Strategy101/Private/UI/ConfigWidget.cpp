@@ -1,7 +1,7 @@
-#include "UI/MapConfigWidget.h"
+#include "UI/ConfigWidget.h"
 #include "GameLogic/TurnBasedGameMode.h"
 
-void UMapConfigWidget::OnStartGame()
+void UConfigWidget::OnStartGame()
 {
     if (!GridManager) return;
 
