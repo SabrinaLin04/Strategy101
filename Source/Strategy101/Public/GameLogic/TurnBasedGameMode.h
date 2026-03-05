@@ -81,6 +81,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Units")
     TSubclassOf<ABrawler> BrawlerClass;
 
+    // Colori scelti dal player per le unità
+    UPROPERTY(BlueprintReadWrite, Category = "Units")
+    FLinearColor HumanUnitColor = FLinearColor(0.5f, 0.f, 1.f);
+
+    UPROPERTY(BlueprintReadWrite, Category = "Units")
+    FLinearColor AIUnitColor = FLinearColor(1.f, 1.f, 1.f);
+
 protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;

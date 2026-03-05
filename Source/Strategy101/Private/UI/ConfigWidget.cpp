@@ -1,11 +1,10 @@
 #include "UI/ConfigWidget.h"
+#include "Grid/GridManager.h"
 #include "GameLogic/TurnBasedGameMode.h"
 
 void UConfigWidget::OnStartGame()
 {
     if (!GridManager) return;
-
-    // Genera la mappa con seed random e rimuove il widget
     GridManager->NoiseSeed = 0;
     GridManager->GenerateGrid();
     RemoveFromParent();
@@ -14,6 +13,22 @@ void UConfigWidget::OnStartGame()
     if (!PC) return;
     PC->SetInputMode(FInputModeGameOnly());
 
-    ATurnBasedGameMode* GameMode = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
-    if (GameMode) GameMode->PerformCoinFlip();
+    ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+    if (GM)
+    {
+        // Passa i colori scelti al GameMode
+        GM->HumanUnitColor = HumanColor;
+        GM->AIUnitColor = AIColor;
+        GM->PerformCoinFlip();
+    }
+}
+
+void UConfigWidget::SetHumanColor(FLinearColor Color)
+{
+    HumanColor = Color;
+}
+
+void UConfigWidget::SetAIColor(FLinearColor Color)
+{
+    AIColor = Color;
 }

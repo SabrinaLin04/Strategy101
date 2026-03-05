@@ -55,6 +55,10 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Unit|Stats")
     int32 CurrentHP;
 
+    // Colore assegnato dal GameMode
+    UPROPERTY(BlueprintReadWrite, Category = "Unit|Visual")
+    FLinearColor OwnerColor = FLinearColor::White;
+
     // --- Stato turno ---
 
     UPROPERTY(BlueprintReadWrite, Category = "Unit|State")

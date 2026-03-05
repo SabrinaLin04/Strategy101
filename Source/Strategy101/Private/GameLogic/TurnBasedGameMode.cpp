@@ -168,6 +168,7 @@ void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
     Unit->SpawnGridX = Cell->GridX;
     Unit->SpawnGridY = Cell->GridY;
     Unit->UnitOwner = EOwner::Human;
+    Unit->OwnerColor = HumanUnitColor;
     Unit->SetOwnerColor();
     Cell->bIsOccupied = true;
 
@@ -253,6 +254,7 @@ void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
     Unit->SpawnGridX = Cell->GridX;
     Unit->SpawnGridY = Cell->GridY;
     Unit->UnitOwner = EOwner::AI;
+    Unit->OwnerColor = AIUnitColor;
     Unit->SetOwnerColor();
     Cell->bIsOccupied = true;
 
