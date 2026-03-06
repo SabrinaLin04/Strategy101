@@ -19,6 +19,7 @@ ATurnBasedGameMode::ATurnBasedGameMode()
     SelectedUnit = nullptr;
     SelectedCell = nullptr;
     HumanUnitsActed = 0;
+    TowerControlSystem = CreateDefaultSubobject<UTowerControlSystem>(TEXT("TowerControlSystem"));
 }
 
 void ATurnBasedGameMode::BeginPlay()
@@ -377,19 +378,26 @@ void ATurnBasedGameMode::EndTurn()
     if (!GS) return;
 
     DeselectUnit();
-    HumanUnitsActed = 0; // reset per il prossimo turno Human
+    HumanUnitsActed = 0;
 
     TArray<ABaseUnit*>& CurrentUnits = (GS->CurrentTurn == ETurnOwner::Human)
         ? GS->HumanUnits : GS->AIUnits;
-
     for (ABaseUnit* Unit : CurrentUnits)
         if (Unit) Unit->ResetTurnState();
 
+    // Valuta torri a fine turno
+    if (TowerControlSystem)
+        TowerControlSystem->EvaluateTowers(this, GS);
+
     CheckGameOver();
+    if (GS->CurrentPhase == EGamePhase::GameOver) return;
+
     GS->SwitchTurn();
 
-    UE_LOG(LogTemp, Warning, TEXT("Turn %d - Now: %s"), GS->TurnNumber,
-        GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"));
+    UE_LOG(LogTemp, Warning, TEXT("Turn %d - Now: %s | Human towers: %d | AI towers: %d"),
+        GS->TurnNumber,
+        GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"),
+        GS->HumanTowersControlled, GS->AITowersControlled);
 
     if (GS->CurrentTurn == ETurnOwner::AI)
         StartAITurn();

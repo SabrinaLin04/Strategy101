@@ -13,6 +13,8 @@
 #include "UI/CoinFlipWidget.h"
 #include "UI/PlacementWidget.h"
 #include "Grid/GridCell.h"
+#include "GameLogic/TowerControlSystem.h"
+#include "Grid/Tower.h"
 #include "TurnBasedGameMode.generated.h"
 
 UCLASS()
@@ -97,6 +99,9 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Units")
     FLinearColor AIUnitColor = FLinearColor(1.f, 1.f, 1.f);
 
+    //getter per il GridManager (usato dal TowerControlSystem)
+    AGridManager* GetGridManager() const { return GridManagerRef; }
+
 protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;
@@ -131,4 +136,7 @@ protected:
 
     // Spawna l'unità corretta nella cella cliccata
     void SpawnUnitAtCell(AGridCell* Cell);
+
+    UPROPERTY()
+    UTowerControlSystem* TowerControlSystem;
 };

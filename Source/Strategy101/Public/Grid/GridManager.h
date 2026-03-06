@@ -105,6 +105,8 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Grid")
     void PlaceTowers();
 
+    const TArray<ATower*>& GetTowers() const { return Towers; }
+
 
 protected:
     //calcola il livello di elevazione per la cella (X, Y) usando Perlin Noise.
