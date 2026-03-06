@@ -25,25 +25,17 @@ void AGridManager::BeginPlay()
 void AGridManager::GenerateGrid()
 {
     ClearGrid();
-
-    //inizializzazione seed
     if (NoiseSeed == 0)
-    {
         FMath::RandInit(FDateTime::Now().GetTicks());
-    }
     else
-    {
         FMath::RandInit(NoiseSeed);
-    }
 
     NoiseOffsetX = FMath::RandRange(0.f, 10000.f);
     NoiseOffsetY = FMath::RandRange(0.f, 10000.f);
 
-    //pre-calcola il range reale del noise per garantire tutti i 5 livelli
     MinNoiseValue = FLT_MAX;
     MaxNoiseValue = -FLT_MAX;
     for (int32 Y = 0; Y < GridHeight; Y++)
-    {
         for (int32 X = 0; X < GridWidth; X++)
         {
             float NX = (X + NoiseOffsetX) * NoiseScale;
@@ -52,78 +44,86 @@ void AGridManager::GenerateGrid()
             MinNoiseValue = FMath::Min(MinNoiseValue, Val);
             MaxNoiseValue = FMath::Max(MaxNoiseValue, Val);
         }
-    }
 
-    //prealloco array
     Cells.SetNum(GridWidth * GridHeight);
 
-    //classe di fallback se non impostata in blueprint
     TSubclassOf<AGridCell> ClassToSpawn = GridCellClass
         ? GridCellClass
         : TSubclassOf<AGridCell>(AGridCell::StaticClass());
 
-    //creo le celle
     for (int32 Y = 0; Y < GridHeight; Y++)
-    {
         for (int32 X = 0; X < GridWidth; X++)
         {
             int32 Elevation = CalculateElevation(X, Y);
-
-            //posizione mondo cella
             FVector WorldPos = GridToWorld(X, Y, Elevation);
             FActorSpawnParameters SpawnParams;
             SpawnParams.Owner = this;
-
             AGridCell* NewCell = GetWorld()->SpawnActor<AGridCell>(
                 ClassToSpawn, WorldPos, FRotator::ZeroRotator, SpawnParams);
-
             if (NewCell)
             {
                 NewCell->GridX = X;
                 NewCell->GridY = Y;
                 NewCell->ElevationLevel = Elevation;
                 NewCell->bIsOccupied = false;
-
-                //definisco il tipo di cella in base al livello
                 switch (Elevation)
                 {
-                case 0:  NewCell->CellType = ECellType::Water;      break;
-                case 1:  NewCell->CellType = ECellType::Plain;      break;
-                case 2:  NewCell->CellType = ECellType::Mountain2;  break;
-                case 3:  NewCell->CellType = ECellType::Mountain3;  break;
-                default: NewCell->CellType = ECellType::Mountain4;  break;
+                case 0:  NewCell->CellType = ECellType::Water;     break;
+                case 1:  NewCell->CellType = ECellType::Plain;     break;
+                case 2:  NewCell->CellType = ECellType::Mountain2; break;
+                case 3:  NewCell->CellType = ECellType::Mountain3; break;
+                default: NewCell->CellType = ECellType::Mountain4; break;
                 }
-
                 NewCell->UpdateVisualColor();
                 Cells[X + Y * GridWidth] = NewCell;
             }
         }
+
+    // Verifica che tutti i livelli 0-4 siano presenti, altrimenti forza una cella
+    bool bLevels[5] = { false, false, false, false, false };
+    for (AGridCell* Cell : Cells)
+        if (Cell) bLevels[Cell->ElevationLevel] = true;
+
+    for (int32 Level = 0; Level < 5; Level++)
+    {
+        if (bLevels[Level]) continue;
+        for (AGridCell* Cell : Cells)
+        {
+            if (!Cell) continue;
+            if (Cell->GridY <= 2 || Cell->GridY >= 22) continue; // evita spawn zone
+            if (Cell->bIsOccupied) continue;
+            Cell->ElevationLevel = Level;
+            Cell->CellType = (ECellType)Level;
+            Cell->UpdateVisualColor();
+            FVector NewPos = GridToWorld(Cell->GridX, Cell->GridY, Level);
+            Cell->SetActorLocation(NewPos);
+            break;
+        }
     }
 
-    //verifica connettività e corregge eventuali isole
     PlaceTowers();
     EnsureConnectivity();
-    
 
     UE_LOG(LogTemp, Warning, TEXT("Grid generated: %d x %d cells"), GridWidth, GridHeight);
 }
 
 int32 AGridManager::CalculateElevation(int32 X, int32 Y) const
 {
+    // Forza livello minimo 1 nelle zone di spawn
+    bool bInSpawnZone = (Y <= 2) || (Y >= 22);
+
     float NX = (X + NoiseOffsetX) * NoiseScale;
     float NY = (Y + NoiseOffsetY) * NoiseScale;
     float NoiseValue = (FMath::PerlinNoise2D(FVector2D(NX, NY)) + 1.f) * 0.5f;
 
-    // Normalizza rispetto al range reale della mappa — garantisce tutti i livelli
     float Range = MaxNoiseValue - MinNoiseValue;
     if (Range < KINDA_SMALL_NUMBER) return 1;
 
     float Normalized = (NoiseValue - MinNoiseValue) / Range;
 
-    // Applica soglia acqua sul valore normalizzato
-    if (Normalized < WaterThreshold) return 0;
+    if (Normalized < WaterThreshold)
+        return bInSpawnZone ? 1 : 0; // nelle spawn zone non può essere acqua
 
-    // Rimappa in livelli 1-4
     float Remapped = (Normalized - WaterThreshold) / (1.f - WaterThreshold);
     return FMath::Clamp(FMath::FloorToInt(Remapped * 4.f) + 1, 1, 4);
 }
@@ -283,6 +283,8 @@ void AGridManager::PlaceTowers()
             Cell->ElevationLevel = 1;
             Cell->CellType = ECellType::Plain;
             Cell->UpdateVisualColor();
+            FVector NewPos = GridToWorld(Ideal.X, Ideal.Y, 1);
+            Cell->SetActorLocation(NewPos);
         }
 
         // Garantisce almeno un vicino calpestabile connesso alla mappa principale
@@ -302,12 +304,16 @@ void AGridManager::PlaceTowers()
         {
             for (int32 i = 0; i < 4; i++)
             {
-                AGridCell* Neighbor = GetCell(Ideal.X + DX[i], Ideal.Y + DY[i]);
+                int32 NX = Ideal.X + DX[i];
+                int32 NY = Ideal.Y + DY[i];
+                AGridCell* Neighbor = GetCell(NX, NY);
                 if (Neighbor)
                 {
                     Neighbor->ElevationLevel = 1;
                     Neighbor->CellType = ECellType::Plain;
                     Neighbor->UpdateVisualColor();
+                    FVector NewPos = GridToWorld(NX, NY, 1);
+                    Neighbor->SetActorLocation(NewPos);
                     break;
                 }
             }
