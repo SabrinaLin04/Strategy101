@@ -33,4 +33,10 @@ public:
     // Seleziona colore AI (chiamata dai bottoni colore)
     UFUNCTION(BlueprintCallable, Category = "Config")
     void SetAIColor(FLinearColor Color);
+
+    UPROPERTY(BlueprintReadWrite, Category = "Config")
+    int32 MaxElevation = 4;
+
+    UFUNCTION(BlueprintCallable, Category = "Config")
+    void SetMaxElevation(int32 Value);
 };

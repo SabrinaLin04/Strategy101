@@ -46,6 +46,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Config")
     float MaxHeightOffset;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid")
+    int32 MaxElevationLevel = 4; // livello massimo generabile (1-4)
+
     //classe Blueprint della cella da spawnare
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Grid|Config")
     TSubclassOf<AGridCell> GridCellClass;

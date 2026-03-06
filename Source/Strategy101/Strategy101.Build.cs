@@ -5,7 +5,7 @@ public class Strategy101 : ModuleRules
     public Strategy101(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-        bUseUnity = false; // disabilita unity build per ridurre picco di memoria
+        bUseUnity = true; // disabilita unity build per ridurre picco di memoria
         PublicDependencyModuleNames.AddRange(new string[] {
             "Core",
             "CoreUObject",

@@ -6,6 +6,7 @@ void UConfigWidget::OnStartGame()
 {
     if (!GridManager) return;
     GridManager->NoiseSeed = 0;
+    GridManager->MaxElevationLevel = MaxElevation;
     GridManager->GenerateGrid();
     RemoveFromParent();
 
@@ -31,4 +32,9 @@ void UConfigWidget::SetHumanColor(FLinearColor Color)
 void UConfigWidget::SetAIColor(FLinearColor Color)
 {
     AIColor = Color;
+}
+
+void UConfigWidget::SetMaxElevation(int32 Value)
+{
+    MaxElevation = FMath::Clamp(Value, 1, 4);
 }

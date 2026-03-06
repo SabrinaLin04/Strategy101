@@ -79,28 +79,27 @@ void AGridManager::GenerateGrid()
             }
         }
 
-    // Verifica che tutti i livelli 0-4 siano presenti, altrimenti forza una cella
-    bool bLevels[5] = { false, false, false, false, false };
+    // Garantisce presenza di acqua
+    bool bHasWater = false;
     for (AGridCell* Cell : Cells)
-        if (Cell) bLevels[Cell->ElevationLevel] = true;
+        if (Cell && Cell->ElevationLevel == 0) { bHasWater = true; break; }
 
-    for (int32 Level = 0; Level < 5; Level++)
+    if (!bHasWater)
     {
-        if (bLevels[Level]) continue;
+        // Forza una cella lontana dalle spawn zone ad essere acqua
         for (AGridCell* Cell : Cells)
         {
             if (!Cell) continue;
-            if (Cell->GridY <= 2 || Cell->GridY >= 22) continue; // evita spawn zone
+            if (Cell->GridY <= 2 || Cell->GridY >= 22) continue;
             if (Cell->bIsOccupied) continue;
-            Cell->ElevationLevel = Level;
-            Cell->CellType = (ECellType)Level;
+            Cell->ElevationLevel = 0;
+            Cell->CellType = ECellType::Water;
             Cell->UpdateVisualColor();
-            FVector NewPos = GridToWorld(Cell->GridX, Cell->GridY, Level);
+            FVector NewPos = GridToWorld(Cell->GridX, Cell->GridY, 0);
             Cell->SetActorLocation(NewPos);
             break;
         }
     }
-
     PlaceTowers();
     EnsureConnectivity();
 
@@ -125,7 +124,7 @@ int32 AGridManager::CalculateElevation(int32 X, int32 Y) const
         return bInSpawnZone ? 1 : 0; // nelle spawn zone non può essere acqua
 
     float Remapped = (Normalized - WaterThreshold) / (1.f - WaterThreshold);
-    return FMath::Clamp(FMath::FloorToInt(Remapped * 4.f) + 1, 1, 4);
+    return FMath::Clamp(FMath::FloorToInt(Remapped * MaxElevationLevel) + 1, 1, MaxElevationLevel);
 }
 
 AGridCell* AGridManager::GetCell(int32 X, int32 Y) const
@@ -141,9 +140,8 @@ bool AGridManager::IsValidCoord(int32 X, int32 Y) const
 
 FVector AGridManager::GridToWorld(int32 X, int32 Y, int32 ElevationLevel) const
 {
-    //z proporzionale al livello di elevazione
     float ZOffset = ElevationLevel * MaxHeightOffset;
-    return FVector(X * CellSize, Y * CellSize, ZOffset);
+    return FVector(X * CellSize, (GridHeight - 1 - Y) * CellSize, ZOffset);
 }
 
 TArray<AGridCell*> AGridManager::GetNeighbors(int32 X, int32 Y) const
@@ -263,8 +261,8 @@ void AGridManager::PlaceTowers()
 {
     TArray<FIntPoint> IdealPositions = {
         FIntPoint(12, 12),
-        FIntPoint(6,  10),
-        FIntPoint(14, 18)
+        FIntPoint(5,  12),
+        FIntPoint(19, 12)
     };
 
     TSubclassOf<ATower> ClassToSpawn = TowerClass ? TowerClass : TSubclassOf<ATower>(ATower::StaticClass());
@@ -274,65 +272,56 @@ void AGridManager::PlaceTowers()
 
     for (const FIntPoint& Ideal : IdealPositions)
     {
-        AGridCell* Cell = GetCell(Ideal.X, Ideal.Y);
-        if (!Cell) continue;
+        // BFS dalla posizione ideale per trovare la cella calpestabile più vicina
+        TArray<bool> Visited;
+        Visited.SetNumZeroed(GridWidth * GridHeight);
+        TQueue<FIntPoint> Queue;
+        Queue.Enqueue(Ideal);
+        Visited[Ideal.X + Ideal.Y * GridWidth] = true;
 
-        // Converte la cella della torre in piano se è acqua
-        if (Cell->ElevationLevel == 0)
-        {
-            Cell->ElevationLevel = 1;
-            Cell->CellType = ECellType::Plain;
-            Cell->UpdateVisualColor();
-            FVector NewPos = GridToWorld(Ideal.X, Ideal.Y, 1);
-            Cell->SetActorLocation(NewPos);
-        }
+        AGridCell* TargetCell = nullptr;
+        FIntPoint TargetPos = Ideal;
 
-        // Garantisce almeno un vicino calpestabile connesso alla mappa principale
-        bool bHasWalkableNeighbor = false;
-        for (int32 i = 0; i < 4; i++)
+        while (!Queue.IsEmpty() && !TargetCell)
         {
-            AGridCell* Neighbor = GetCell(Ideal.X + DX[i], Ideal.Y + DY[i]);
-            if (Neighbor && Neighbor->ElevationLevel > 0)
+            FIntPoint Current;
+            Queue.Dequeue(Current);
+
+            AGridCell* Cell = GetCell(Current.X, Current.Y);
+            if (Cell && Cell->ElevationLevel > 0 && !Cell->bIsOccupied)
             {
-                bHasWalkableNeighbor = true;
+                TargetCell = Cell;
+                TargetPos = Current;
                 break;
             }
-        }
 
-        // Se tutti i vicini sono acqua, ne converte uno in piano per creare il ponte
-        if (!bHasWalkableNeighbor)
-        {
             for (int32 i = 0; i < 4; i++)
             {
-                int32 NX = Ideal.X + DX[i];
-                int32 NY = Ideal.Y + DY[i];
-                AGridCell* Neighbor = GetCell(NX, NY);
-                if (Neighbor)
-                {
-                    Neighbor->ElevationLevel = 1;
-                    Neighbor->CellType = ECellType::Plain;
-                    Neighbor->UpdateVisualColor();
-                    FVector NewPos = GridToWorld(NX, NY, 1);
-                    Neighbor->SetActorLocation(NewPos);
-                    break;
-                }
+                int32 NX = Current.X + DX[i];
+                int32 NY = Current.Y + DY[i];
+                if (!IsValidCoord(NX, NY)) continue;
+                if (Visited[NX + NY * GridWidth]) continue;
+                Visited[NX + NY * GridWidth] = true;
+                Queue.Enqueue(FIntPoint(NX, NY));
             }
         }
 
-        FVector WorldPos = GridToWorld(Ideal.X, Ideal.Y, Cell->ElevationLevel);
+        if (!TargetCell) continue;
+
+        FVector WorldPos = GridToWorld(TargetPos.X, TargetPos.Y, TargetCell->ElevationLevel);
         WorldPos.Z += 10.f;
 
         FActorSpawnParameters SpawnParams;
         SpawnParams.Owner = this;
-        ATower* NewTower = GetWorld()->SpawnActor<ATower>(
-            ClassToSpawn, WorldPos, FRotator::ZeroRotator, SpawnParams);
+        ATower* NewTower = GetWorld()->SpawnActor<ATower>(ClassToSpawn, WorldPos, FRotator::ZeroRotator, SpawnParams);
 
         if (NewTower)
         {
-            NewTower->GridX = Ideal.X;
-            NewTower->GridY = Ideal.Y;
-            Cell->bIsOccupied = true;
+            NewTower->GridX = TargetPos.X;
+            NewTower->GridY = TargetPos.Y;
+            TargetCell->bIsOccupied = true;
             Towers.Add(NewTower);
+            UE_LOG(LogTemp, Warning, TEXT("Tower placed at (%d,%d), ideal was (%d,%d)"), TargetPos.X, TargetPos.Y, Ideal.X, Ideal.Y);
         }
     }
 }
