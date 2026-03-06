@@ -27,6 +27,8 @@ void ABaseUnit::SetOwnerColor()
     UMaterialInstanceDynamic* DynMat = UnitMesh->CreateAndSetMaterialInstanceDynamic(0);
     if (DynMat)
         DynMat->SetVectorParameterValue(TEXT("BaseColor"), OwnerColor);
+    UE_LOG(LogTemp, Warning, TEXT("SetOwnerColor called R:%f G:%f B:%f"),
+        OwnerColor.R, OwnerColor.G, OwnerColor.B);
 }
 
 void ABaseUnit::BeginPlay()
