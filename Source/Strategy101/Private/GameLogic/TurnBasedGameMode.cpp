@@ -16,6 +16,9 @@ ATurnBasedGameMode::ATurnBasedGameMode()
     AIUnitsPlaced = 0;
     PlacementTurn = ETurnOwner::Human;
     GridManagerRef = nullptr;
+    SelectedUnit = nullptr;
+    SelectedCell = nullptr;
+    HumanUnitsActed = 0;
 }
 
 void ATurnBasedGameMode::BeginPlay()
@@ -266,6 +269,60 @@ void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
     AdvancePlacementStep();
 }
 
+void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
+{
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS || GS->CurrentPhase != EGamePhase::Playing) return;
+    if (GS->CurrentTurn != ETurnOwner::Human) return;
+
+    AGridCell* Cell = GridManagerRef->GetCell(X, Y);
+    if (!Cell) return;
+
+    // Controlla se la cella ha un'unità Human sopra
+    for (ABaseUnit* Unit : GS->HumanUnits)
+    {
+        if (Unit && Unit->GridX == X && Unit->GridY == Y)
+        {
+            // Se già selezionata, deseleziona
+            if (SelectedUnit == Unit)
+                DeselectUnit();
+            else
+                SelectUnit(Unit);
+            return;
+        }
+    }
+}
+
+void ATurnBasedGameMode::SelectUnit(ABaseUnit* Unit)
+{
+    DeselectUnit();
+    SelectedUnit = Unit;
+
+    AGridCell* Cell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
+    UE_LOG(LogTemp, Warning, TEXT("SelectUnit: cell at (%d,%d) = %s"),
+        Unit->GridX, Unit->GridY, Cell ? TEXT("found") : TEXT("NULL"));
+
+    if (Cell)
+    {
+        SelectedCell = Cell;
+        UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
+        UE_LOG(LogTemp, Warning, TEXT("GetCellDynMat = %s"), DynMat ? TEXT("valid") : TEXT("NULL"));
+        if (DynMat)
+            DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.4f, 0.f, 0.6f));
+    }
+}
+
+void ATurnBasedGameMode::DeselectUnit()
+{
+    // Ripristina colore cella
+    if (SelectedCell)
+    {
+        SelectedCell->UpdateVisualColor();
+        SelectedCell = nullptr;
+    }
+    SelectedUnit = nullptr;
+}
+
 void ATurnBasedGameMode::AdvancePlacementStep()
 {
     if ((HumanUnitsPlaced + AIUnitsPlaced) >= 4)
@@ -299,6 +356,14 @@ void ATurnBasedGameMode::StartGamePhase()
 
     UE_LOG(LogTemp, Warning, TEXT("Game phase started! First turn: %s"),
         GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"));
+
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        PC->bShowMouseCursor = true;
+        PC->bEnableClickEvents = true;
+        PC->SetInputMode(FInputModeGameAndUI());
+    }
 }
 
 bool ATurnBasedGameMode::IsPlacementComplete() const
@@ -311,6 +376,9 @@ void ATurnBasedGameMode::EndTurn()
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
+    DeselectUnit();
+    HumanUnitsActed = 0; // reset per il prossimo turno Human
+
     TArray<ABaseUnit*>& CurrentUnits = (GS->CurrentTurn == ETurnOwner::Human)
         ? GS->HumanUnits : GS->AIUnits;
 
@@ -320,7 +388,7 @@ void ATurnBasedGameMode::EndTurn()
     CheckGameOver();
     GS->SwitchTurn();
 
-    UE_LOG(LogTemp, Warning, TEXT("Turn %d — Now: %s"), GS->TurnNumber,
+    UE_LOG(LogTemp, Warning, TEXT("Turn %d - Now: %s"), GS->TurnNumber,
         GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"));
 
     if (GS->CurrentTurn == ETurnOwner::AI)

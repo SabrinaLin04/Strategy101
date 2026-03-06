@@ -4,6 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "Units/Attackable.h"
 #include "Units/Movable.h"
+class ATurnBasedGameMode;
+class ATurnBasedGameState;
 #include "BaseUnit.generated.h"
 
 
@@ -60,6 +62,9 @@ public:
     FLinearColor OwnerColor = FLinearColor::White;
 
     // --- Stato turno ---
+
+    UFUNCTION()
+    void OnUnitClicked(AActor* TouchedActor, FKey ButtonPressed);
 
     UPROPERTY(BlueprintReadWrite, Category = "Unit|State")
     bool bHasMoved;

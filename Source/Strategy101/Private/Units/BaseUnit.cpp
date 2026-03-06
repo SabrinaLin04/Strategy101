@@ -1,4 +1,6 @@
 #include "BaseUnit.h"
+#include "GameLogic/TurnBasedGameMode.h"
+#include "GameLogic/TurnBasedGameState.h"
 #include "Math/UnrealMathUtility.h"
 
 ABaseUnit::ABaseUnit()
@@ -35,6 +37,20 @@ void ABaseUnit::BeginPlay()
 {
     Super::BeginPlay();
     CurrentHP = MaxHP;
+    EnableInput(GetWorld()->GetFirstPlayerController());
+    OnClicked.AddDynamic(this, &ABaseUnit::OnUnitClicked);
+}
+
+void ABaseUnit::OnUnitClicked(AActor* TouchedActor, FKey ButtonPressed)
+{
+    ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+    if (!GM) return;
+
+    ATurnBasedGameState* GS = Cast<ATurnBasedGameState>(GetWorld()->GetGameState());
+    if (!GS) return;
+
+    if (GS->CurrentPhase == EGamePhase::Playing)
+        GM->OnHumanGameCellClicked(GridX, GridY);
 }
 
 int32 ABaseUnit::RollDamage() const

@@ -35,7 +35,16 @@ void AGridCell::BeginPlay()
 void AGridCell::OnCellClicked(AActor* TouchedActor, FKey ButtonPressed)
 {
     ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
-    if (GM) GM->OnHumanPlacementCellClicked(GridX, GridY);
+    if (!GM) return;
+
+    ATurnBasedGameState* GS = Cast<ATurnBasedGameState>(GetWorld()->GetGameState());
+    if (!GS) return;
+
+    // Routing in base alla fase di gioco
+    if (GS->CurrentPhase == EGamePhase::Placement)
+        GM->OnHumanPlacementCellClicked(GridX, GridY);
+    else if (GS->CurrentPhase == EGamePhase::Playing)
+        GM->OnHumanGameCellClicked(GridX, GridY);
 }
 
 void AGridCell::UpdateVisualColor()
@@ -44,7 +53,9 @@ void AGridCell::UpdateVisualColor()
     if (CellMesh->GetNumMaterials() == 0) return; // nessun materiale assegnato
 
     // Crea un MaterialInstanceDynamic per cambiare colore a runtime
-    UMaterialInstanceDynamic* DynMat = CellMesh->CreateAndSetMaterialInstanceDynamic(0);
+    if (!CellDynMat)
+        CellDynMat = CellMesh->CreateAndSetMaterialInstanceDynamic(0);
+    UMaterialInstanceDynamic* DynMat = CellDynMat;
     if (!DynMat) return;
 
     FLinearColor Color;

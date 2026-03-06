@@ -46,6 +46,15 @@ public:
     // Controlla se il posizionamento è completo (4 unità totali piazzate)
     bool IsPlacementComplete() const;
 
+    // Chiamata quando il player clicca durante la fase Playing
+    void OnHumanGameCellClicked(int32 X, int32 Y);
+
+    // Seleziona un'unità e evidenzia la sua cella
+    void SelectUnit(ABaseUnit* Unit);
+
+    // Deseleziona l'unità corrente
+    void DeselectUnit();
+
     // Chiamata al termine delle azioni di un giocatore, passa il turno
     UFUNCTION(BlueprintCallable, Category = "GameMode|Turn")
     void EndTurn();
@@ -92,6 +101,15 @@ protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;
     int32 AIUnitsPlaced;
+
+    // Unità attualmente selezionata dal player
+    ABaseUnit* SelectedUnit;
+
+    // Cella attualmente evidenziata per la selezione
+    AGridCell* SelectedCell;
+
+    // Numero di unità Human che hanno completato le azioni in questo turno
+    int32 HumanUnitsActed;
 
     // A chi tocca piazzare nella fase placement
     ETurnOwner PlacementTurn;

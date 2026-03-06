@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 class ATurnBasedGameMode;
+#include "GameLogic/TurnBasedGameState.h"
 #include "GridCell.generated.h"
 
 
@@ -49,6 +50,8 @@ public:
     // Getter per la mesh della cella (usato per l'highlight)
     UStaticMeshComponent* GetCellMesh() const { return CellMesh; }
 
+    UMaterialInstanceDynamic* GetCellDynMat() const { return CellDynMat; }
+
     UFUNCTION()
     void OnCellClicked(AActor* TouchedActor, FKey ButtonPressed);
 
@@ -57,4 +60,8 @@ protected:
 
     UPROPERTY(VisibleAnywhere, Category = "Components")
     UStaticMeshComponent* CellMesh;
+
+    // Mantieni il riferimento al DynMat per riutilizzarlo
+    UPROPERTY()
+    UMaterialInstanceDynamic* CellDynMat;
 };
