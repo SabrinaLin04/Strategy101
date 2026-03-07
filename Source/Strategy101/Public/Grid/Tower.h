@@ -59,6 +59,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
     FLinearColor AIColor;
 
+    UFUNCTION()
+    void OnTowerClicked(AActor* TouchedActor, FKey ButtonPressed);
+
 protected:
     virtual void BeginPlay() override;
 

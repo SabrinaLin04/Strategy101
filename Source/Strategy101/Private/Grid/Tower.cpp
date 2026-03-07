@@ -1,4 +1,5 @@
 #include "Tower.h"
+#include "GameLogic/TurnBasedGameMode.h"
 
 ATower::ATower()
 {
@@ -18,6 +19,8 @@ void ATower::BeginPlay()
 {
     Super::BeginPlay();
     UpdateVisualState();
+    EnableInput(GetWorld()->GetFirstPlayerController());
+    OnClicked.AddDynamic(this, &ATower::OnTowerClicked);
 }
 
 void ATower::UpdateVisualState()
@@ -47,10 +50,17 @@ void ATower::UpdateVisualState()
     DynMat->SetVectorParameterValue(TEXT("BaseColor"), Color);
 }
 
+void ATower::OnTowerClicked(AActor* TouchedActor, FKey ButtonPressed)
+{
+    ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+    if (GM) GM->OnTowerClicked(this);
+}
+
 void ATower::EvaluateState(bool bHumanInZone, bool bAIInZone)
 {
     if (bHumanInZone && bAIInZone)
     {
+        //contesa: rimuove il punto al proprietario precedente
         TowerState = ETowerState::Contested;
         OwnerPlayer = ETowerOwner::None;
     }
@@ -66,8 +76,14 @@ void ATower::EvaluateState(bool bHumanInZone, bool bAIInZone)
     }
     else
     {
-        TowerState = ETowerState::Neutral;
-        OwnerPlayer = ETowerOwner::None;
+        //nessuna unità in zona: mantieni il proprietario precedente se la torre era Controlled
+        //torna Neutral solo se era Contested o non aveva mai avuto proprietario
+        if (TowerState == ETowerState::Contested)
+        {
+            TowerState = ETowerState::Neutral;
+            OwnerPlayer = ETowerOwner::None;
+        }
+        //se era Controlled rimane Controlled con lo stesso OwnerPlayer
     }
 
     UpdateVisualState();

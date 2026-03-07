@@ -23,6 +23,7 @@ ATurnBasedGameMode::ATurnBasedGameMode()
     MovingUnit = nullptr;
     CurrentPathStep = 0;
     bIsAIMoving = false;
+    SelectedTower = nullptr;
 }
 
 void ATurnBasedGameMode::BeginPlay()
@@ -316,6 +317,46 @@ void ATurnBasedGameMode::StartGamePhase()
     }
 }
 
+void ATurnBasedGameMode::OnTowerClicked(ATower* Tower)
+{
+    if (SelectedTower == Tower)
+        ClearInfoHighlight();
+    else
+        ShowTowerCaptureZone(Tower);
+}
+
+void ATurnBasedGameMode::ShowTowerCaptureZone(ATower* Tower)
+{
+    ClearInfoHighlight();
+    if (!Tower || !GridManagerRef) return;
+    SelectedTower = Tower;
+
+    //evidenzia in giallo tutte le celle nel raggio Chebyshev <= CaptureRadius
+    for (int32 DX = -Tower->CaptureRadius; DX <= Tower->CaptureRadius; DX++)
+    {
+        for (int32 DY = -Tower->CaptureRadius; DY <= Tower->CaptureRadius; DY++)
+        {
+            int32 CX = Tower->GridX + DX;
+            int32 CY = Tower->GridY + DY;
+            if (CX < 0 || CX >= 25 || CY < 0 || CY >= 25) continue;
+            AGridCell* Cell = GridManagerRef->GetCell(CX, CY);
+            if (!Cell) continue;
+            UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
+            if (DynMat)
+                DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(1.f, 0.9f, 0.f));
+            InfoHighlightedCells.Add(Cell);
+        }
+    }
+}
+
+void ATurnBasedGameMode::ClearInfoHighlight()
+{
+    for (AGridCell* Cell : InfoHighlightedCells)
+        if (Cell) Cell->UpdateVisualColor();
+    InfoHighlightedCells.Empty();
+    SelectedTower = nullptr;
+}
+
 bool ATurnBasedGameMode::IsPlacementComplete() const
 {
     return (HumanUnitsPlaced + AIUnitsPlaced) >= 4;
@@ -421,12 +462,13 @@ void ATurnBasedGameMode::SelectUnit(ABaseUnit* Unit)
             DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.4f, 0.f, 0.6f));
     }
 
+    //prima attacco (arancione), poi movimento (cyan) sopra — movimento ha priorità visiva
+    if (!Unit->bHasAttacked)
+        ShowAttackRange(Unit);
+
     if (!Unit->bHasMoved)
         ShowMovementRange(Unit);
-    else if (!Unit->bHasAttacked)
-        ShowAttackRange(Unit); //ha già mosso: mostra direttamente range attacco
 }
-
 void ATurnBasedGameMode::DeselectUnit()
 {
     ClearMovementRange();
@@ -533,7 +575,7 @@ void ATurnBasedGameMode::DoMovementStep()
 
                 if (AttackableTargets.IsEmpty())
                 {
-                    //nessun nemico in range: conta l'azione come completata automaticamente
+                    ClearMovementRange(); //nasconde il range arancione se nessun nemico attaccabile
                     MovingUnit->bHasAttacked = true;
                     HumanUnitsActedSet.Add(MovingUnit);
                     MovingUnit = nullptr;
@@ -695,22 +737,40 @@ void ATurnBasedGameMode::ShowAttackRange(ABaseUnit* Unit)
     ClearAttackRange();
     if (!Unit || !GridManagerRef) return;
 
+    AGridCell* MyCell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
+    if (!MyCell) return;
+
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
+    for (int32 X = 0; X < 25; X++)
+    {
+        for (int32 Y = 0; Y < 25; Y++)
+        {
+            AGridCell* Cell = GridManagerRef->GetCell(X, Y);
+            if (!Cell) continue;
+            if (X == Unit->GridX && Y == Unit->GridY) continue;
+            if (Cell->ElevationLevel > MyCell->ElevationLevel) continue;
+
+            int32 Dist = FMath::Abs(X - Unit->GridX) + FMath::Abs(Y - Unit->GridY);
+
+            if (Unit->AttackType == EAttackType::Melee && Dist != 1) continue;
+            if (Unit->AttackType == EAttackType::Ranged && Dist > Unit->AttackRange) continue;
+
+            UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
+            if (DynMat)
+                DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(1.f, 0.3f, 0.f));
+
+            MovementHighlightedCells.Add(Cell);
+        }
+    }
+
+    //popola AttackableTargets per sapere quali nemici sono cliccabili
     TArray<ABaseUnit*>& Enemies = (Unit->UnitOwner == EOwner::Human) ? GS->AIUnits : GS->HumanUnits;
     for (ABaseUnit* Enemy : Enemies)
     {
         if (!Enemy || !Enemy->IsAlive()) continue;
         if (!IAttackable::Execute_IsTargetInRange(Unit, Enemy)) continue;
-
-        AGridCell* Cell = GridManagerRef->GetCell(Enemy->GridX, Enemy->GridY);
-        if (!Cell) continue;
-
-        UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
-        if (DynMat)
-            DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(1.f, 0.f, 0.f));
-
         AttackableTargets.Add(Enemy);
     }
 }
@@ -731,12 +791,14 @@ void ATurnBasedGameMode::ExecuteAttack(ABaseUnit* Attacker, ABaseUnit* Target)
     if (!Attacker || !Target) return;
 
     IAttackable::Execute_PerformAttack(Attacker, Target);
-    ClearAttackRange();
+    Attacker->bHasAttacked = true;
 
-    //registra l'unità come completata e controlla fine turno
+    ClearMovementRange(); //rimuove highlight arancione e cyan
+    ClearAttackRange();   //svuota AttackableTargets
+
     HumanUnitsActedSet.Add(Attacker);
-    ATurnBasedGameState* GS = GetTurnGameState();
-    if (GS && HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
+
+    if (HumanUnitsActedSet.Num() >= GetTurnGameState()->HumanUnits.Num())
         EndTurn();
 }
 
@@ -744,6 +806,9 @@ void ATurnBasedGameMode::CheckGameOver()
 {
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
+
+    UE_LOG(LogTemp, Warning, TEXT("CheckGameOver: HumanConsec=%d AIConsec=%d"),
+        GS->HumanConsecutiveTowerTurns, GS->AIConsecutiveTowerTurns);
 
     ETurnOwner Winner;
     if (GS->CheckWinCondition(Winner))

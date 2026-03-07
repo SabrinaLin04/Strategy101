@@ -103,6 +103,8 @@ public:
     //getter per il GridManager (usato dal TowerControlSystem)
     AGridManager* GetGridManager() const { return GridManagerRef; }
 
+    void OnTowerClicked(ATower* Tower);
+
 protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;
@@ -188,6 +190,11 @@ protected:
 
     //true durante il movimento step-by-step dell'AI (differenzia da movimento Human)
     bool bIsAIMoving;
+
+    void ShowTowerCaptureZone(ATower* Tower);
+    void ClearInfoHighlight();
+    TArray<AGridCell*> InfoHighlightedCells;
+    ATower* SelectedTower;
 
     //stato interno animazione movimento
     ABaseUnit* MovingUnit;
