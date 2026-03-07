@@ -28,7 +28,7 @@ void ATower::UpdateVisualState()
     UMaterialInstanceDynamic* DynMat = TowerMesh->CreateAndSetMaterialInstanceDynamic(0);
     if (!DynMat) return;
 
-    FLinearColor Color;
+    FLinearColor Color = FLinearColor(0.7f, 0.7f, 0.7f);
     switch (TowerState)
     {
     case ETowerState::Neutral:

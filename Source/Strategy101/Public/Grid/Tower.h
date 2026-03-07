@@ -53,6 +53,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Tower")
     void EvaluateState(bool bHumanInZone, bool bAIInZone);
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor HumanColor;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
+    FLinearColor AIColor;
+
 protected:
     virtual void BeginPlay() override;
 
