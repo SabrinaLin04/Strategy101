@@ -18,11 +18,11 @@ ATurnBasedGameMode::ATurnBasedGameMode()
     GridManagerRef = nullptr;
     SelectedUnit = nullptr;
     SelectedCell = nullptr;
-    HumanUnitsActed = 0;
     TowerControlSystem = CreateDefaultSubobject<UTowerControlSystem>(TEXT("TowerControlSystem"));
     Pathfinding = CreateDefaultSubobject<UPathfindingComponent>(TEXT("Pathfinding"));
     MovingUnit = nullptr;
     CurrentPathStep = 0;
+    bIsAIMoving = false;
 }
 
 void ATurnBasedGameMode::BeginPlay()
@@ -106,7 +106,7 @@ void ATurnBasedGameMode::HighlightHumanPlacementZone()
     if (!GridManagerRef) return;
     ClearHighlight();
 
-    // Evidenzia celle valide in Y=0,1,2 non occupate e non acqua
+    //evidenzia celle valide in Y=0,1,2 non occupate e non acqua
     for (int32 Y = 0; Y <= 2; Y++)
     {
         for (int32 X = 0; X < 25; X++)
@@ -114,18 +114,15 @@ void ATurnBasedGameMode::HighlightHumanPlacementZone()
             AGridCell* Cell = GridManagerRef->GetCell(X, Y);
             if (Cell && Cell->ElevationLevel > 0 && !Cell->bIsOccupied)
             {
-                // Colore ciano per indicare cella disponibile
                 UMaterialInstanceDynamic* DynMat =
                     Cell->GetCellMesh()->CreateAndSetMaterialInstanceDynamic(0);
                 if (DynMat)
-                    DynMat->SetVectorParameterValue(TEXT("BaseColor"),
-                        FLinearColor(0.f, 1.f, 1.f));
+                    DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.f, 1.f, 1.f));
                 HighlightedCells.Add(Cell);
             }
         }
     }
 }
-
 
 void ATurnBasedGameMode::OnHumanPlacementCellClicked(int32 X, int32 Y)
 {
@@ -154,7 +151,6 @@ void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
-    // Determina quale classe spawnare
     TSubclassOf<ABaseUnit> ClassToSpawn = (HumanUnitsPlaced == 0)
         ? TSubclassOf<ABaseUnit>(SniperClass)
         : TSubclassOf<ABaseUnit>(BrawlerClass);
@@ -162,14 +158,13 @@ void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
     if (!ClassToSpawn) return;
 
     FVector WorldPos = Cell->GetActorLocation();
-    WorldPos.Z += 60.f; // solleva l'unità sopra la cella
+    WorldPos.Z += 60.f;
 
     FActorSpawnParameters Params;
     Params.Owner = this;
     ABaseUnit* Unit = GetWorld()->SpawnActor<ABaseUnit>(ClassToSpawn, WorldPos, FRotator::ZeroRotator, Params);
     if (!Unit) return;
 
-    // Inizializza l'unità
     Unit->GridX = Cell->GridX;
     Unit->GridY = Cell->GridY;
     Unit->SpawnGridX = Cell->GridX;
@@ -190,7 +185,7 @@ void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
 
 void ATurnBasedGameMode::ClearHighlight()
 {
-    // Ripristina il colore originale di ogni cella evidenziata
+    //ripristina il colore originale di ogni cella evidenziata
     for (AGridCell* Cell : HighlightedCells)
         if (Cell) Cell->UpdateVisualColor();
     HighlightedCells.Empty();
@@ -207,7 +202,6 @@ void ATurnBasedGameMode::ShowPlacementWidget()
         if (PlacementWidgetRef) PlacementWidgetRef->AddToViewport();
     }
 
-    // Prima unità = Sniper, seconda = Brawler
     FString UnitName = (HumanUnitsPlaced == 0) ? TEXT("Sniper") : TEXT("Brawler");
     if (PlacementWidgetRef) PlacementWidgetRef->ShowPlacementPrompt(UnitName);
 
@@ -241,7 +235,6 @@ void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
-    // Prima unità AI = Sniper, seconda = Brawler
     TSubclassOf<ABaseUnit> ClassToSpawn = (AIUnitsPlaced == 0)
         ? TSubclassOf<ABaseUnit>(SniperClass)
         : TSubclassOf<ABaseUnit>(BrawlerClass);
@@ -273,6 +266,29 @@ void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
     AdvancePlacementStep();
 }
 
+void ATurnBasedGameMode::AdvancePlacementStep()
+{
+    if ((HumanUnitsPlaced + AIUnitsPlaced) >= 4)
+    {
+        if (PlacementWidgetRef) PlacementWidgetRef->HidePlacementPrompt();
+        StartGamePhase();
+        return;
+    }
+
+    PlacementTurn = (PlacementTurn == ETurnOwner::Human) ? ETurnOwner::AI : ETurnOwner::Human;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (GS) GS->CurrentTurn = PlacementTurn;
+
+    if (PlacementTurn == ETurnOwner::AI)
+        PerformAIPlacement();
+    else
+    {
+        HighlightHumanPlacementZone();
+        ShowPlacementWidget();
+    }
+}
+
 void ATurnBasedGameMode::StartGamePhase()
 {
     ATurnBasedGameState* GS = GetTurnGameState();
@@ -291,6 +307,18 @@ void ATurnBasedGameMode::StartGamePhase()
         PC->bEnableClickEvents = true;
         PC->SetInputMode(FInputModeGameAndUI());
     }
+
+    //se l'AI ha vinto il coin flip, avvia subito il suo turno
+    if (GS->CurrentTurn == ETurnOwner::AI)
+    {
+        FTimerHandle DelayTimer;
+        GetWorldTimerManager().SetTimer(DelayTimer, this, &ATurnBasedGameMode::StartAITurn, 1.f, false);
+    }
+}
+
+bool ATurnBasedGameMode::IsPlacementComplete() const
+{
+    return (HumanUnitsPlaced + AIUnitsPlaced) >= 4;
 }
 
 void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
@@ -330,9 +358,9 @@ void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
                 if (Unit->bHasMoved && AttackableTargets.IsEmpty())
                 {
                     DeselectUnit();
-                    HumanUnitsActed++;
+                    HumanUnitsActedSet.Add(Unit);
                     ATurnBasedGameState* GS2 = GetTurnGameState();
-                    if (GS2 && HumanUnitsActed >= GS2->HumanUnits.Num())
+                    if (GS2 && HumanUnitsActedSet.Num() >= GS2->HumanUnits.Num())
                         EndTurn();
                 }
                 else
@@ -348,49 +376,20 @@ void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
         DeselectUnit();
 }
 
-
-void ATurnBasedGameMode::AdvancePlacementStep()
-{
-    if ((HumanUnitsPlaced + AIUnitsPlaced) >= 4)
-    {
-        if (PlacementWidgetRef) PlacementWidgetRef->HidePlacementPrompt();
-        StartGamePhase();
-        return;
-    }
-
-    PlacementTurn = (PlacementTurn == ETurnOwner::Human) ? ETurnOwner::AI : ETurnOwner::Human;
-
-    ATurnBasedGameState* GS = GetTurnGameState();
-    if (GS) GS->CurrentTurn = PlacementTurn;
-
-    if (PlacementTurn == ETurnOwner::AI)
-        PerformAIPlacement();
-    else
-    {
-        HighlightHumanPlacementZone();
-        ShowPlacementWidget();
-    }
-}
-
-bool ATurnBasedGameMode::IsPlacementComplete() const
-{
-    return (HumanUnitsPlaced + AIUnitsPlaced) >= 4;
-}
-
 void ATurnBasedGameMode::EndTurn()
 {
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
     DeselectUnit();
-    HumanUnitsActed = 0;
+    HumanUnitsActedSet.Empty(); //reset set unità che hanno agito
 
     TArray<ABaseUnit*>& CurrentUnits = (GS->CurrentTurn == ETurnOwner::Human)
         ? GS->HumanUnits : GS->AIUnits;
     for (ABaseUnit* Unit : CurrentUnits)
         if (Unit) Unit->ResetTurnState();
 
-    // Valuta torri a fine turno
+    //valuta torri a fine turno
     if (TowerControlSystem)
         TowerControlSystem->EvaluateTowers(this, GS);
 
@@ -446,7 +445,6 @@ void ATurnBasedGameMode::ShowMovementRange(ABaseUnit* Unit)
     ClearMovementRange();
     if (!Unit || !GridManagerRef) return;
 
-    //usa il PathfindingComponent per ottenere le celle raggiungibili
     TMap<FIntPoint, int32> Reachable = Pathfinding->GetReachableCells(
         GridManagerRef, FIntPoint(Unit->GridX, Unit->GridY), Unit->MaxMovement);
 
@@ -478,7 +476,6 @@ void ATurnBasedGameMode::MoveUnitToCell(ABaseUnit* Unit, int32 DestX, int32 Dest
 {
     if (!Unit || !GridManagerRef) return;
 
-    //calcola il percorso A* dalla posizione attuale alla destinazione
     TArray<FIntPoint> Path = Pathfinding->FindPath(
         GridManagerRef,
         FIntPoint(Unit->GridX, Unit->GridY),
@@ -518,8 +515,41 @@ void ATurnBasedGameMode::DoMovementStep()
             if (NewCell) NewCell->bIsOccupied = true;
             MovingUnit->bHasMoved = true;
 
-            //dopo il movimento mostra subito i nemici attaccabili
-            SelectUnit(MovingUnit);
+            if (bIsAIMoving)
+            {
+                //AI: attacca se possibile poi processa la prossima unità
+                ABaseUnit* JustMoved = MovingUnit;
+                MovingUnit = nullptr;
+                MovementPath.Empty();
+                CurrentPathStep = 0;
+                bIsAIMoving = false;
+                AIAttackIfPossible(JustMoved);
+                return;
+            }
+            else
+            {
+                //Human: mostra nemici attaccabili
+                ShowAttackRange(MovingUnit);
+
+                if (AttackableTargets.IsEmpty())
+                {
+                    //nessun nemico in range: conta l'azione come completata automaticamente
+                    MovingUnit->bHasAttacked = true;
+                    HumanUnitsActedSet.Add(MovingUnit);
+                    MovingUnit = nullptr;
+                    MovementPath.Empty();
+                    CurrentPathStep = 0;
+                    ATurnBasedGameState* GS = GetTurnGameState();
+                    if (GS && HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
+                        EndTurn();
+                    return;
+                }
+                else
+                {
+                    //ci sono nemici in range: evidenzia e aspetta click del player
+                    SelectUnit(MovingUnit);
+                }
+            }
         }
 
         MovingUnit = nullptr;
@@ -544,27 +574,120 @@ void ATurnBasedGameMode::DoMovementStep()
 
 void ATurnBasedGameMode::StartAITurn()
 {
-    // Placeholder — implementato al Giorno 19
-    UE_LOG(LogTemp, Warning, TEXT("AI turn started"));
-}
-
-void ATurnBasedGameMode::CheckGameOver()
-{
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
-    ETurnOwner Winner;
-    if (GS->CheckWinCondition(Winner))
-    {
-        GS->CurrentPhase = EGamePhase::GameOver;
-        UE_LOG(LogTemp, Warning, TEXT("GAME OVER — Winner: %s"),
-            Winner == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"));
-    }
+    AIUnitQueue.Empty();
+    for (ABaseUnit* Unit : GS->AIUnits)
+        if (Unit && Unit->IsAlive()) AIUnitQueue.Add(Unit);
+
+    UE_LOG(LogTemp, Warning, TEXT("AI turn started - %d units"), AIUnitQueue.Num());
+
+    FTimerHandle DelayTimer;
+    GetWorldTimerManager().SetTimer(DelayTimer, this, &ATurnBasedGameMode::ProcessNextAIUnit, 0.8f, false);
 }
 
-ATurnBasedGameState* ATurnBasedGameMode::GetTurnGameState() const
+void ATurnBasedGameMode::ProcessNextAIUnit()
 {
-    return GetGameState<ATurnBasedGameState>();
+    if (AIUnitQueue.IsEmpty())
+    {
+        EndTurn();
+        return;
+    }
+
+    ABaseUnit* Unit = AIUnitQueue[0];
+    AIUnitQueue.RemoveAt(0);
+
+    if (!Unit || !Unit->IsAlive())
+    {
+        ProcessNextAIUnit();
+        return;
+    }
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    TMap<FIntPoint, int32> Reachable = Pathfinding->GetReachableCells(
+        GridManagerRef, FIntPoint(Unit->GridX, Unit->GridY), Unit->MaxMovement);
+
+    FIntPoint BestTarget(-1, -1);
+    int32 BestScore = INT_MAX;
+
+    //priorità 1: torre neutrale — cerca la cella raggiungibile più vicina a una torre libera
+    for (ATower* Tower : GridManagerRef->GetTowers())
+    {
+        if (!Tower || Tower->OwnerPlayer != ETowerOwner::None) continue;
+        FIntPoint TowerPos(Tower->GridX, Tower->GridY);
+
+        for (auto& Pair : Reachable)
+        {
+            int32 Dist = FMath::Abs(Pair.Key.X - TowerPos.X) + FMath::Abs(Pair.Key.Y - TowerPos.Y);
+            if (Dist < BestScore) { BestScore = Dist; BestTarget = Pair.Key; }
+        }
+    }
+
+    //priorità 2: se nessuna torre libera, muoviti verso il nemico più vicino
+    if (BestTarget == FIntPoint(-1, -1))
+    {
+        ABaseUnit* NearestEnemy = nullptr;
+        int32 MinDist = INT_MAX;
+        for (ABaseUnit* Enemy : GS->HumanUnits)
+        {
+            if (!Enemy || !Enemy->IsAlive()) continue;
+            int32 Dist = FMath::Abs(Unit->GridX - Enemy->GridX) + FMath::Abs(Unit->GridY - Enemy->GridY);
+            if (Dist < MinDist) { MinDist = Dist; NearestEnemy = Enemy; }
+        }
+
+        if (NearestEnemy)
+        {
+            FIntPoint EnemyPos(NearestEnemy->GridX, NearestEnemy->GridY);
+            for (auto& Pair : Reachable)
+            {
+                int32 Dist = FMath::Abs(Pair.Key.X - EnemyPos.X) + FMath::Abs(Pair.Key.Y - EnemyPos.Y);
+                if (Dist < BestScore) { BestScore = Dist; BestTarget = Pair.Key; }
+            }
+        }
+    }
+
+    bIsAIMoving = true;
+    FIntPoint CurrentPos(Unit->GridX, Unit->GridY);
+    if (BestTarget != FIntPoint(-1, -1) && BestTarget != CurrentPos)
+    {
+        TArray<FIntPoint> Path = Pathfinding->FindPath(
+            GridManagerRef, CurrentPos, BestTarget, Unit->MaxMovement);
+
+        if (!Path.IsEmpty())
+        {
+            StartStepMovement(Unit, Path);
+            return;
+        }
+    }
+
+    //nessun movimento possibile: prova solo ad attaccare
+    bIsAIMoving = false;
+    AIAttackIfPossible(Unit);
+}
+
+void ATurnBasedGameMode::AIAttackIfPossible(ABaseUnit* Unit)
+{
+    if (!Unit) return;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    for (ABaseUnit* Enemy : GS->HumanUnits)
+    {
+        if (!Enemy || !Enemy->IsAlive()) continue;
+        if (IAttackable::Execute_IsTargetInRange(Unit, Enemy))
+        {
+            IAttackable::Execute_PerformAttack(Unit, Enemy);
+            UE_LOG(LogTemp, Warning, TEXT("AI unit attacked enemy at (%d,%d)"), Enemy->GridX, Enemy->GridY);
+            break;
+        }
+    }
+
+    FTimerHandle DelayTimer;
+    GetWorldTimerManager().SetTimer(DelayTimer, this, &ATurnBasedGameMode::ProcessNextAIUnit, 0.5f, false);
 }
 
 void ATurnBasedGameMode::ShowAttackRange(ABaseUnit* Unit)
@@ -575,7 +698,6 @@ void ATurnBasedGameMode::ShowAttackRange(ABaseUnit* Unit)
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
-    //controlla ogni unità nemica: se in range, evidenzia la sua cella in rosso
     TArray<ABaseUnit*>& Enemies = (Unit->UnitOwner == EOwner::Human) ? GS->AIUnits : GS->HumanUnits;
     for (ABaseUnit* Enemy : Enemies)
     {
@@ -611,10 +733,28 @@ void ATurnBasedGameMode::ExecuteAttack(ABaseUnit* Attacker, ABaseUnit* Target)
     IAttackable::Execute_PerformAttack(Attacker, Target);
     ClearAttackRange();
 
-    //se l'unità ha anche già mosso, conta come azione completata
-    HumanUnitsActed++;
-
+    //registra l'unità come completata e controlla fine turno
+    HumanUnitsActedSet.Add(Attacker);
     ATurnBasedGameState* GS = GetTurnGameState();
-    if (GS && HumanUnitsActed >= GS->HumanUnits.Num())
+    if (GS && HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
         EndTurn();
+}
+
+void ATurnBasedGameMode::CheckGameOver()
+{
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    ETurnOwner Winner;
+    if (GS->CheckWinCondition(Winner))
+    {
+        GS->CurrentPhase = EGamePhase::GameOver;
+        UE_LOG(LogTemp, Warning, TEXT("GAME OVER - Winner: %s"),
+            Winner == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"));
+    }
+}
+
+ATurnBasedGameState* ATurnBasedGameMode::GetTurnGameState() const
+{
+    return GetGameState<ATurnBasedGameState>();
 }

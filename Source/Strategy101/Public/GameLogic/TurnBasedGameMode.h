@@ -115,7 +115,7 @@ protected:
     AGridCell* SelectedCell;
 
     // Numero di unità Human che hanno completato le azioni in questo turno
-    int32 HumanUnitsActed;
+    TSet<ABaseUnit*> HumanUnitsActedSet;
 
     // A chi tocca piazzare nella fase placement
     ETurnOwner PlacementTurn;
@@ -176,6 +176,18 @@ protected:
 
     //nemici attualmente evidenziati come attaccabili
     TArray<ABaseUnit*> AttackableTargets;
+
+    //processa il turno della prossima unità AI nella coda
+    void ProcessNextAIUnit();
+
+    //attacca un nemico in range se disponibile, poi processa la prossima unità
+    void AIAttackIfPossible(ABaseUnit* Unit);
+
+    //coda delle unità AI da processare nel turno corrente
+    TArray<ABaseUnit*> AIUnitQueue;
+
+    //true durante il movimento step-by-step dell'AI (differenzia da movimento Human)
+    bool bIsAIMoving;
 
     //stato interno animazione movimento
     ABaseUnit* MovingUnit;
