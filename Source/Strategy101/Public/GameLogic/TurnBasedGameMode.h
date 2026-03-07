@@ -15,6 +15,7 @@
 #include "Grid/GridCell.h"
 #include "GameLogic/TowerControlSystem.h"
 #include "Grid/Tower.h"
+#include "GameLogic/PathfindingComponent.h"
 #include "TurnBasedGameMode.generated.h"
 
 UCLASS()
@@ -137,6 +138,36 @@ protected:
     // Spawna l'unità corretta nella cella cliccata
     void SpawnUnitAtCell(AGridCell* Cell);
 
+    //mostra il range di movimento dell'unità selezionata colorando le celle raggiungibili
+    void ShowMovementRange(ABaseUnit* Unit);
+
+    //rimuove l'evidenziazione del range di movimento
+    void ClearMovementRange();
+
+    //sposta l'unità alla destinazione e aggiorna griglia e posizione world
+    void MoveUnitToCell(ABaseUnit* Unit, int32 DestX, int32 DestY);
+
+    //celle attualmente evidenziate per il movimento
+    TArray<AGridCell*> MovementHighlightedCells;
+
+    //set di posizioni raggiungibili per lookup rapido durante il click
+    TSet<FIntPoint> ReachableCellSet;
+
     UPROPERTY()
     UTowerControlSystem* TowerControlSystem;
+
+    UPROPERTY()
+    UPathfindingComponent* Pathfinding;
+
+    //muove l'unità step-by-step lungo il path con timer
+    void StartStepMovement(ABaseUnit* Unit, TArray<FIntPoint> Path);
+
+    //eseguito ad ogni step dell'animazione di movimento
+    void DoMovementStep();
+
+    //stato interno animazione movimento
+    ABaseUnit* MovingUnit;
+    TArray<FIntPoint> MovementPath;
+    int32 CurrentPathStep;
+    FTimerHandle StepTimer;
 };

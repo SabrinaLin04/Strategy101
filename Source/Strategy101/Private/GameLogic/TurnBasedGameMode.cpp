@@ -20,6 +20,9 @@ ATurnBasedGameMode::ATurnBasedGameMode()
     SelectedCell = nullptr;
     HumanUnitsActed = 0;
     TowerControlSystem = CreateDefaultSubobject<UTowerControlSystem>(TEXT("TowerControlSystem"));
+    Pathfinding = CreateDefaultSubobject<UPathfindingComponent>(TEXT("Pathfinding"));
+    MovingUnit = nullptr;
+    CurrentPathStep = 0;
 }
 
 void ATurnBasedGameMode::BeginPlay()
@@ -270,21 +273,44 @@ void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
     AdvancePlacementStep();
 }
 
+void ATurnBasedGameMode::StartGamePhase()
+{
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    GS->CurrentPhase = EGamePhase::Playing;
+    GS->CurrentTurn = GS->CoinFlipWinner;
+
+    UE_LOG(LogTemp, Warning, TEXT("Game phase started! First turn: %s"),
+        GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"));
+
+    APlayerController* PC = GetWorld()->GetFirstPlayerController();
+    if (PC)
+    {
+        PC->bShowMouseCursor = true;
+        PC->bEnableClickEvents = true;
+        PC->SetInputMode(FInputModeGameAndUI());
+    }
+}
+
 void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
 {
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS || GS->CurrentPhase != EGamePhase::Playing) return;
     if (GS->CurrentTurn != ETurnOwner::Human) return;
 
-    AGridCell* Cell = GridManagerRef->GetCell(X, Y);
-    if (!Cell) return;
+    //se c'è un'unità selezionata e la cella è nel range di movimento, spostala
+    if (SelectedUnit && ReachableCellSet.Contains(FIntPoint(X, Y)))
+    {
+        MoveUnitToCell(SelectedUnit, X, Y);
+        return;
+    }
 
-    // Controlla se la cella ha un'unità Human sopra
+    //altrimenti prova a selezionare un'unità Human nella cella cliccata
     for (ABaseUnit* Unit : GS->HumanUnits)
     {
         if (Unit && Unit->GridX == X && Unit->GridY == Y)
         {
-            // Se già selezionata, deseleziona
             if (SelectedUnit == Unit)
                 DeselectUnit();
             else
@@ -292,36 +318,10 @@ void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
             return;
         }
     }
-}
 
-void ATurnBasedGameMode::SelectUnit(ABaseUnit* Unit)
-{
-    DeselectUnit();
-    SelectedUnit = Unit;
-
-    AGridCell* Cell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
-    UE_LOG(LogTemp, Warning, TEXT("SelectUnit: cell at (%d,%d) = %s"),
-        Unit->GridX, Unit->GridY, Cell ? TEXT("found") : TEXT("NULL"));
-
-    if (Cell)
-    {
-        SelectedCell = Cell;
-        UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
-        UE_LOG(LogTemp, Warning, TEXT("GetCellDynMat = %s"), DynMat ? TEXT("valid") : TEXT("NULL"));
-        if (DynMat)
-            DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.4f, 0.f, 0.6f));
-    }
-}
-
-void ATurnBasedGameMode::DeselectUnit()
-{
-    // Ripristina colore cella
-    if (SelectedCell)
-    {
-        SelectedCell->UpdateVisualColor();
-        SelectedCell = nullptr;
-    }
-    SelectedUnit = nullptr;
+    //click su cella vuota: deseleziona
+    if (SelectedUnit)
+        DeselectUnit();
 }
 
 void ATurnBasedGameMode::AdvancePlacementStep()
@@ -344,26 +344,6 @@ void ATurnBasedGameMode::AdvancePlacementStep()
     {
         HighlightHumanPlacementZone();
         ShowPlacementWidget();
-    }
-}
-
-void ATurnBasedGameMode::StartGamePhase()
-{
-    ATurnBasedGameState* GS = GetTurnGameState();
-    if (!GS) return;
-
-    GS->CurrentPhase = EGamePhase::Playing;
-    GS->CurrentTurn = GS->CoinFlipWinner;
-
-    UE_LOG(LogTemp, Warning, TEXT("Game phase started! First turn: %s"),
-        GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"));
-
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (PC)
-    {
-        PC->bShowMouseCursor = true;
-        PC->bEnableClickEvents = true;
-        PC->SetInputMode(FInputModeGameAndUI());
     }
 }
 
@@ -401,6 +381,142 @@ void ATurnBasedGameMode::EndTurn()
 
     if (GS->CurrentTurn == ETurnOwner::AI)
         StartAITurn();
+}
+
+void ATurnBasedGameMode::SelectUnit(ABaseUnit* Unit)
+{
+    DeselectUnit();
+    SelectedUnit = Unit;
+
+    AGridCell* Cell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
+    if (Cell)
+    {
+        SelectedCell = Cell;
+        UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
+        if (DynMat)
+            DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.4f, 0.f, 0.6f));
+    }
+
+    //mostra range solo se l'unità non si è ancora mossa
+    if (!Unit->bHasMoved)
+        ShowMovementRange(Unit);
+}
+
+void ATurnBasedGameMode::DeselectUnit()
+{
+    ClearMovementRange();
+
+    if (SelectedCell)
+    {
+        SelectedCell->UpdateVisualColor();
+        SelectedCell = nullptr;
+    }
+    SelectedUnit = nullptr;
+}
+
+
+void ATurnBasedGameMode::ShowMovementRange(ABaseUnit* Unit)
+{
+    ClearMovementRange();
+    if (!Unit || !GridManagerRef) return;
+
+    //usa il PathfindingComponent per ottenere le celle raggiungibili
+    TMap<FIntPoint, int32> Reachable = Pathfinding->GetReachableCells(
+        GridManagerRef, FIntPoint(Unit->GridX, Unit->GridY), Unit->MaxMovement);
+
+    FIntPoint Start(Unit->GridX, Unit->GridY);
+    for (auto& Pair : Reachable)
+    {
+        if (Pair.Key == Start) continue;
+        AGridCell* Cell = GridManagerRef->GetCell(Pair.Key.X, Pair.Key.Y);
+        if (!Cell) continue;
+
+        UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
+        if (DynMat)
+            DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.f, 0.8f, 1.f));
+
+        MovementHighlightedCells.Add(Cell);
+        ReachableCellSet.Add(Pair.Key);
+    }
+}
+
+void ATurnBasedGameMode::ClearMovementRange()
+{
+    for (AGridCell* Cell : MovementHighlightedCells)
+        if (Cell) Cell->UpdateVisualColor();
+    MovementHighlightedCells.Empty();
+    ReachableCellSet.Empty();
+}
+
+void ATurnBasedGameMode::MoveUnitToCell(ABaseUnit* Unit, int32 DestX, int32 DestY)
+{
+    if (!Unit || !GridManagerRef) return;
+
+    //calcola il percorso A* dalla posizione attuale alla destinazione
+    TArray<FIntPoint> Path = Pathfinding->FindPath(
+        GridManagerRef,
+        FIntPoint(Unit->GridX, Unit->GridY),
+        FIntPoint(DestX, DestY),
+        Unit->MaxMovement);
+
+    if (Path.IsEmpty()) return;
+
+    DeselectUnit();
+    StartStepMovement(Unit, Path);
+}
+
+void ATurnBasedGameMode::StartStepMovement(ABaseUnit* Unit, TArray<FIntPoint> Path)
+{
+    MovingUnit = Unit;
+    MovementPath = Path;
+    CurrentPathStep = 0;
+
+    //libera la cella di partenza
+    AGridCell* OldCell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
+    if (OldCell) OldCell->bIsOccupied = false;
+
+    //timer: uno step ogni 0.2 secondi
+    GetWorldTimerManager().SetTimer(StepTimer, this,
+        &ATurnBasedGameMode::DoMovementStep, 0.2f, true);
+}
+
+void ATurnBasedGameMode::DoMovementStep()
+{
+    if (!MovingUnit || CurrentPathStep >= MovementPath.Num())
+    {
+        //movimento completato
+        GetWorldTimerManager().ClearTimer(StepTimer);
+
+        if (MovingUnit)
+        {
+            AGridCell* NewCell = GridManagerRef->GetCell(MovingUnit->GridX, MovingUnit->GridY);
+            if (NewCell) NewCell->bIsOccupied = true;
+            MovingUnit->bHasMoved = true;
+            HumanUnitsActed++;
+
+            ATurnBasedGameState* GS = GetTurnGameState();
+            if (GS && HumanUnitsActed >= GS->HumanUnits.Num())
+                EndTurn();
+        }
+
+        MovingUnit = nullptr;
+        MovementPath.Empty();
+        CurrentPathStep = 0;
+        return;
+    }
+
+    //sposta l'unità alla cella successiva nel path
+    FIntPoint NextPos = MovementPath[CurrentPathStep++];
+    AGridCell* NextCell = GridManagerRef->GetCell(NextPos.X, NextPos.Y);
+    if (!NextCell) return;
+
+    FVector NewWorldPos = NextCell->GetActorLocation();
+    NewWorldPos.Z += 60.f;
+    MovingUnit->SetActorLocation(NewWorldPos);
+    MovingUnit->GridX = NextPos.X;
+    MovingUnit->GridY = NextPos.Y;
+
+    UE_LOG(LogTemp, Warning, TEXT("Unit step -> (%d,%d)"), NextPos.X, NextPos.Y);
 }
 
 void ATurnBasedGameMode::StartAITurn()
