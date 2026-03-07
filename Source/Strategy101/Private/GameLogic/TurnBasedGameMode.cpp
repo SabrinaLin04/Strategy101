@@ -299,30 +299,55 @@ void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
     if (!GS || GS->CurrentPhase != EGamePhase::Playing) return;
     if (GS->CurrentTurn != ETurnOwner::Human) return;
 
-    //se c'è un'unità selezionata e la cella è nel range di movimento, spostala
-    if (SelectedUnit && ReachableCellSet.Contains(FIntPoint(X, Y)))
+    //controlla se si è cliccato un nemico attaccabile
+    if (SelectedUnit && !SelectedUnit->bHasAttacked)
+    {
+        for (ABaseUnit* Enemy : AttackableTargets)
+        {
+            if (Enemy && Enemy->GridX == X && Enemy->GridY == Y)
+            {
+                ExecuteAttack(SelectedUnit, Enemy);
+                return;
+            }
+        }
+    }
+
+    //controlla se cella nel range di movimento
+    if (SelectedUnit && !SelectedUnit->bHasMoved && ReachableCellSet.Contains(FIntPoint(X, Y)))
     {
         MoveUnitToCell(SelectedUnit, X, Y);
         return;
     }
 
-    //altrimenti prova a selezionare un'unità Human nella cella cliccata
+    //controlla se si è cliccata un'unità Human
     for (ABaseUnit* Unit : GS->HumanUnits)
     {
         if (Unit && Unit->GridX == X && Unit->GridY == Y)
         {
             if (SelectedUnit == Unit)
-                DeselectUnit();
+            {
+                //deseleziona: se ha già mosso e nessun nemico in range, conta l'azione
+                if (Unit->bHasMoved && AttackableTargets.IsEmpty())
+                {
+                    DeselectUnit();
+                    HumanUnitsActed++;
+                    ATurnBasedGameState* GS2 = GetTurnGameState();
+                    if (GS2 && HumanUnitsActed >= GS2->HumanUnits.Num())
+                        EndTurn();
+                }
+                else
+                    DeselectUnit();
+            }
             else
                 SelectUnit(Unit);
             return;
         }
     }
 
-    //click su cella vuota: deseleziona
     if (SelectedUnit)
         DeselectUnit();
 }
+
 
 void ATurnBasedGameMode::AdvancePlacementStep()
 {
@@ -397,14 +422,16 @@ void ATurnBasedGameMode::SelectUnit(ABaseUnit* Unit)
             DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(0.4f, 0.f, 0.6f));
     }
 
-    //mostra range solo se l'unità non si è ancora mossa
     if (!Unit->bHasMoved)
         ShowMovementRange(Unit);
+    else if (!Unit->bHasAttacked)
+        ShowAttackRange(Unit); //ha già mosso: mostra direttamente range attacco
 }
 
 void ATurnBasedGameMode::DeselectUnit()
 {
     ClearMovementRange();
+    ClearAttackRange();
 
     if (SelectedCell)
     {
@@ -413,7 +440,6 @@ void ATurnBasedGameMode::DeselectUnit()
     }
     SelectedUnit = nullptr;
 }
-
 
 void ATurnBasedGameMode::ShowMovementRange(ABaseUnit* Unit)
 {
@@ -484,7 +510,6 @@ void ATurnBasedGameMode::DoMovementStep()
 {
     if (!MovingUnit || CurrentPathStep >= MovementPath.Num())
     {
-        //movimento completato
         GetWorldTimerManager().ClearTimer(StepTimer);
 
         if (MovingUnit)
@@ -492,11 +517,9 @@ void ATurnBasedGameMode::DoMovementStep()
             AGridCell* NewCell = GridManagerRef->GetCell(MovingUnit->GridX, MovingUnit->GridY);
             if (NewCell) NewCell->bIsOccupied = true;
             MovingUnit->bHasMoved = true;
-            HumanUnitsActed++;
 
-            ATurnBasedGameState* GS = GetTurnGameState();
-            if (GS && HumanUnitsActed >= GS->HumanUnits.Num())
-                EndTurn();
+            //dopo il movimento mostra subito i nemici attaccabili
+            SelectUnit(MovingUnit);
         }
 
         MovingUnit = nullptr;
@@ -544,3 +567,54 @@ ATurnBasedGameState* ATurnBasedGameMode::GetTurnGameState() const
     return GetGameState<ATurnBasedGameState>();
 }
 
+void ATurnBasedGameMode::ShowAttackRange(ABaseUnit* Unit)
+{
+    ClearAttackRange();
+    if (!Unit || !GridManagerRef) return;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    //controlla ogni unità nemica: se in range, evidenzia la sua cella in rosso
+    TArray<ABaseUnit*>& Enemies = (Unit->UnitOwner == EOwner::Human) ? GS->AIUnits : GS->HumanUnits;
+    for (ABaseUnit* Enemy : Enemies)
+    {
+        if (!Enemy || !Enemy->IsAlive()) continue;
+        if (!IAttackable::Execute_IsTargetInRange(Unit, Enemy)) continue;
+
+        AGridCell* Cell = GridManagerRef->GetCell(Enemy->GridX, Enemy->GridY);
+        if (!Cell) continue;
+
+        UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
+        if (DynMat)
+            DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(1.f, 0.f, 0.f));
+
+        AttackableTargets.Add(Enemy);
+    }
+}
+
+void ATurnBasedGameMode::ClearAttackRange()
+{
+    for (ABaseUnit* Enemy : AttackableTargets)
+    {
+        if (!Enemy) continue;
+        AGridCell* Cell = GridManagerRef->GetCell(Enemy->GridX, Enemy->GridY);
+        if (Cell) Cell->UpdateVisualColor();
+    }
+    AttackableTargets.Empty();
+}
+
+void ATurnBasedGameMode::ExecuteAttack(ABaseUnit* Attacker, ABaseUnit* Target)
+{
+    if (!Attacker || !Target) return;
+
+    IAttackable::Execute_PerformAttack(Attacker, Target);
+    ClearAttackRange();
+
+    //se l'unità ha anche già mosso, conta come azione completata
+    HumanUnitsActed++;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (GS && HumanUnitsActed >= GS->HumanUnits.Num())
+        EndTurn();
+}

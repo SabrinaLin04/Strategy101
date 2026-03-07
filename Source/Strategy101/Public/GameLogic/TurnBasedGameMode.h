@@ -165,6 +165,18 @@ protected:
     //eseguito ad ogni step dell'animazione di movimento
     void DoMovementStep();
 
+    //mostra i nemici attaccabili dall'unità selezionata (highlight rosso)
+    void ShowAttackRange(ABaseUnit* Unit);
+
+    //rimuove l'highlight dell'attacco
+    void ClearAttackRange();
+
+    //esegue l'attacco dell'unità selezionata sul target
+    void ExecuteAttack(ABaseUnit* Attacker, ABaseUnit* Target);
+
+    //nemici attualmente evidenziati come attaccabili
+    TArray<ABaseUnit*> AttackableTargets;
+
     //stato interno animazione movimento
     ABaseUnit* MovingUnit;
     TArray<FIntPoint> MovementPath;

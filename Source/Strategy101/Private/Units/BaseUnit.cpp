@@ -72,12 +72,6 @@ bool ABaseUnit::TakeDamage_Unit(int32 DamageAmount)
 
 // --- IAttackable ---
 
-int32 ABaseUnit::PerformAttack_Implementation(AActor* Target)
-{
-    // Placeholder — logica completa al Giorno 18
-    return RollDamage();
-}
-
 bool ABaseUnit::ReceiveDamage_Implementation(int32 DamageAmount)
 {
     return TakeDamage_Unit(DamageAmount);
@@ -85,8 +79,64 @@ bool ABaseUnit::ReceiveDamage_Implementation(int32 DamageAmount)
 
 bool ABaseUnit::IsTargetInRange_Implementation(AActor* Target)
 {
-    // Placeholder — logica completa al Giorno 18
-    return false;
+    ABaseUnit* TargetUnit = Cast<ABaseUnit>(Target);
+    if (!TargetUnit) return false;
+
+    ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+    if (!GM) return false;
+    AGridManager* Grid = GM->GetGridManager();
+    if (!Grid) return false;
+
+    AGridCell* MyCell = Grid->GetCell(GridX, GridY);
+    AGridCell* TargetCell = Grid->GetCell(TargetUnit->GridX, TargetUnit->GridY);
+    if (!MyCell || !TargetCell) return false;
+
+    //vincolo elevazione: posso attaccare solo unità al mio stesso livello o inferiore
+    if (TargetCell->ElevationLevel > MyCell->ElevationLevel) return false;
+
+    //per il range usiamo Manhattan senza costo doppio in salita
+    if (AttackType == EAttackType::Ranged)
+    {
+        //Sniper: distanza Manhattan pura, oltrepassa acqua
+        int32 Dist = FMath::Abs(GridX - TargetUnit->GridX) + FMath::Abs(GridY - TargetUnit->GridY);
+        return Dist <= AttackRange;
+    }
+    else
+    {
+        //Brawler: range 1, solo celle adiacenti (no diagonale)
+        int32 DX = FMath::Abs(GridX - TargetUnit->GridX);
+        int32 DY = FMath::Abs(GridY - TargetUnit->GridY);
+        return (DX + DY) == 1;
+    }
+}
+
+int32 ABaseUnit::PerformAttack_Implementation(AActor* Target)
+{
+    ABaseUnit* TargetUnit = Cast<ABaseUnit>(Target);
+    if (!TargetUnit) return 0;
+
+    int32 Damage = RollDamage();
+    bool bDied = TargetUnit->TakeDamage_Unit(Damage);
+
+    UE_LOG(LogTemp, Warning, TEXT("%s attacked %s for %d damage (HP left: %d)"),
+        *GetName(), *TargetUnit->GetName(), Damage, TargetUnit->CurrentHP);
+
+    if (bDied)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("%s was eliminated!"), *TargetUnit->GetName());
+        TargetUnit->SetActorHiddenInGame(true);
+
+        //libera la cella occupata
+        ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+        if (GM)
+        {
+            AGridCell* Cell = GM->GetGridManager()->GetCell(TargetUnit->GridX, TargetUnit->GridY);
+            if (Cell) Cell->bIsOccupied = false;
+        }
+    }
+
+    bHasAttacked = true;
+    return Damage;
 }
 
 int32 ABaseUnit::GetCounterAttackDamage_Implementation()
