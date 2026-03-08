@@ -31,19 +31,20 @@ void ATower::UpdateVisualState()
     UMaterialInstanceDynamic* DynMat = TowerMesh->CreateAndSetMaterialInstanceDynamic(0);
     if (!DynMat) return;
 
-    FLinearColor Color = FLinearColor(0.7f, 0.7f, 0.7f);
+    FLinearColor Color;
     switch (TowerState)
     {
     case ETowerState::Neutral:
         Color = FLinearColor(0.7f, 0.7f, 0.7f);
         break;
     case ETowerState::Controlled:
-        Color = (OwnerPlayer == ETowerOwner::Human)
-            ? FLinearColor(0.0f, 0.0f, 1.0f)
-            : FLinearColor(1.0f, 0.0f, 0.0f);
+        Color = (OwnerPlayer == ETowerOwner::Human) ? HumanColor : AIColor;
         break;
     case ETowerState::Contested:
         Color = FLinearColor(0.5f, 0.0f, 0.5f);
+        break;
+    default:
+        Color = FLinearColor(0.7f, 0.7f, 0.7f);
         break;
     }
 

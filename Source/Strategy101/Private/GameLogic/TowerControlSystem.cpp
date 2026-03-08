@@ -56,7 +56,8 @@ void UTowerControlSystem::EvaluateTowers(ATurnBasedGameMode* GM, ATurnBasedGameS
 bool UTowerControlSystem::IsUnitInCaptureZone(ABaseUnit* Unit, ATower* Tower) const
 {
     if (!Unit || !Tower) return false;
+    if (!Unit->IsAlive()) return false; //unità eliminate non contano
     int32 DX = FMath::Abs(Unit->GridX - Tower->GridX);
     int32 DY = FMath::Abs(Unit->GridY - Tower->GridY);
-    return FMath::Max(DX, DY) <= Tower->CaptureRadius; // distanza Chebyshev include diagonali
+    return FMath::Max(DX, DY) <= Tower->CaptureRadius;
 }

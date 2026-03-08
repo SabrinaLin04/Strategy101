@@ -870,27 +870,6 @@ void ATurnBasedGameMode::CheckGameOver()
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
-    //controlla se tutte le unità di un giocatore sono morte
-    bool bAllHumanDead = GS->HumanUnits.Num() > 0 && GS->HumanUnits.FilterByPredicate(
-        [](ABaseUnit* U) { return U && U->IsAlive(); }).Num() == 0;
-
-    bool bAllAIDead = GS->AIUnits.Num() > 0 && GS->AIUnits.FilterByPredicate(
-        [](ABaseUnit* U) { return U && U->IsAlive(); }).Num() == 0;
-
-    if (bAllHumanDead)
-    {
-        GS->CurrentPhase = EGamePhase::GameOver;
-        UE_LOG(LogTemp, Warning, TEXT("GAME OVER - Winner: AI (all human units eliminated)"));
-        return;
-    }
-
-    if (bAllAIDead)
-    {
-        GS->CurrentPhase = EGamePhase::GameOver;
-        UE_LOG(LogTemp, Warning, TEXT("GAME OVER - Winner: Human (all AI units eliminated)"));
-        return;
-    }
-
     UE_LOG(LogTemp, Warning, TEXT("CheckGameOver: HumanConsec=%d AIConsec=%d"),
         GS->HumanConsecutiveTowerTurns, GS->AIConsecutiveTowerTurns);
 
