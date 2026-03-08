@@ -12,6 +12,7 @@
 #include "Grid/GridManager.h"
 #include "UI/CoinFlipWidget.h"
 #include "UI/PlacementWidget.h"
+#include "UI/GameHUDWidget.h"
 #include "Grid/GridCell.h"
 #include "GameLogic/TowerControlSystem.h"
 #include "Grid/Tower.h"
@@ -105,6 +106,13 @@ public:
 
     void OnTowerClicked(ATower* Tower);
 
+
+    //chiamato dal bottone End Turn
+    void HumanEndTurn();
+
+    //chiamato dal bottone Confirm Position
+    void HumanConfirmPosition();
+
 protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;
@@ -195,6 +203,14 @@ protected:
     void ClearInfoHighlight();
     TArray<AGridCell*> InfoHighlightedCells;
     ATower* SelectedTower;
+
+    //classe del widget HUD da assegnare nella Blueprint
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UGameHUDWidget> GameHUDWidgetClass;
+
+    UPROPERTY()
+    UGameHUDWidget* GameHUDWidgetRef;
+
 
     //stato interno animazione movimento
     ABaseUnit* MovingUnit;

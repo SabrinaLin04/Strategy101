@@ -6,6 +6,7 @@
 #include "Units/Sniper.h"
 #include "Units/Brawler.h"
 #include "UI/PlacementWidget.h"
+#include "UI/GameHUDWidget.h"
 #include "EngineUtils.h"
 
 ATurnBasedGameMode::ATurnBasedGameMode()
@@ -29,6 +30,18 @@ ATurnBasedGameMode::ATurnBasedGameMode()
 void ATurnBasedGameMode::BeginPlay()
 {
     Super::BeginPlay();
+
+    //fallback per il controllo delle torri
+    if (!TowerControlSystem)
+    {
+        TowerControlSystem = NewObject<UTowerControlSystem>(this);
+        UE_LOG(LogTemp, Warning, TEXT("TowerControlSystem recreated in BeginPlay"));
+    }
+    if (!Pathfinding)
+    {
+        Pathfinding = NewObject<UPathfindingComponent>(this);
+        UE_LOG(LogTemp, Warning, TEXT("Pathfinding recreated in BeginPlay"));
+    }
 
     GetWorldTimerManager().SetTimerForNextTick([this]()
         {
@@ -315,6 +328,15 @@ void ATurnBasedGameMode::StartGamePhase()
         FTimerHandle DelayTimer;
         GetWorldTimerManager().SetTimer(DelayTimer, this, &ATurnBasedGameMode::StartAITurn, 1.f, false);
     }
+
+    //crea il widget HUD con i bottoni
+    APlayerController* HUDController = GetWorld()->GetFirstPlayerController();
+    if (HUDController && GameHUDWidgetClass)
+    {
+        GameHUDWidgetRef = CreateWidget<UGameHUDWidget>(HUDController, GameHUDWidgetClass);
+        if (GameHUDWidgetRef) GameHUDWidgetRef->AddToViewport();
+    }
+    
 }
 
 void ATurnBasedGameMode::OnTowerClicked(ATower* Tower)
@@ -433,16 +455,18 @@ void ATurnBasedGameMode::EndTurn()
     //valuta torri a fine turno
     if (TowerControlSystem)
         TowerControlSystem->EvaluateTowers(this, GS);
+    else
+        UE_LOG(LogTemp, Warning, TEXT("TowerControlSystem is NULL!"));
 
     CheckGameOver();
     if (GS->CurrentPhase == EGamePhase::GameOver) return;
 
     GS->SwitchTurn();
 
-    UE_LOG(LogTemp, Warning, TEXT("Turn %d - Now: %s | Human towers: %d | AI towers: %d"),
-        GS->TurnNumber,
+    UE_LOG(LogTemp, Warning, TEXT("EndTurn called: CurrentTurn=%s, HumanActedSet=%d, Turn=%d"),
         GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"),
-        GS->HumanTowersControlled, GS->AITowersControlled);
+        HumanUnitsActedSet.Num(),
+        GS->TurnNumber);
 
     if (GS->CurrentTurn == ETurnOwner::AI)
         StartAITurn();
@@ -614,6 +638,44 @@ void ATurnBasedGameMode::DoMovementStep()
     UE_LOG(LogTemp, Warning, TEXT("Unit step -> (%d,%d)"), NextPos.X, NextPos.Y);
 }
 
+void ATurnBasedGameMode::HumanEndTurn()
+{
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS || GS->CurrentTurn != ETurnOwner::Human) return;
+
+    //forza la fine del turno human indipendentemente dalle azioni fatte
+    DeselectUnit();
+    for (ABaseUnit* Unit : GS->HumanUnits)
+        if (Unit) Unit->ResetTurnState();
+    HumanUnitsActedSet.Empty();
+    EndTurn();
+}
+
+void ATurnBasedGameMode::HumanConfirmPosition()
+{
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS || GS->CurrentTurn != ETurnOwner::Human) return;
+    if (!SelectedUnit) return;
+
+    SelectedUnit->bHasMoved = true;
+    ClearMovementRange();
+
+    ShowAttackRange(SelectedUnit);
+
+    if (AttackableTargets.IsEmpty())
+    {
+        //nessun nemico attaccabile: unità ha finito le sue azioni
+        ClearAttackRange();
+        SelectedUnit->bHasAttacked = true;
+        HumanUnitsActedSet.Add(SelectedUnit);
+        ABaseUnit* Done = SelectedUnit;
+        DeselectUnit();
+        if (HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
+            EndTurn();
+    }
+    //altrimenti rimane selezionata e mostra il range arancione
+}
+
 void ATurnBasedGameMode::StartAITurn()
 {
     ATurnBasedGameState* GS = GetTurnGameState();
@@ -631,6 +693,7 @@ void ATurnBasedGameMode::StartAITurn()
 
 void ATurnBasedGameMode::ProcessNextAIUnit()
 {
+    UE_LOG(LogTemp, Warning, TEXT("ProcessNextAIUnit: queue size = %d"), AIUnitQueue.Num());
     if (AIUnitQueue.IsEmpty())
     {
         EndTurn();
@@ -806,6 +869,27 @@ void ATurnBasedGameMode::CheckGameOver()
 {
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
+
+    //controlla se tutte le unità di un giocatore sono morte
+    bool bAllHumanDead = GS->HumanUnits.Num() > 0 && GS->HumanUnits.FilterByPredicate(
+        [](ABaseUnit* U) { return U && U->IsAlive(); }).Num() == 0;
+
+    bool bAllAIDead = GS->AIUnits.Num() > 0 && GS->AIUnits.FilterByPredicate(
+        [](ABaseUnit* U) { return U && U->IsAlive(); }).Num() == 0;
+
+    if (bAllHumanDead)
+    {
+        GS->CurrentPhase = EGamePhase::GameOver;
+        UE_LOG(LogTemp, Warning, TEXT("GAME OVER - Winner: AI (all human units eliminated)"));
+        return;
+    }
+
+    if (bAllAIDead)
+    {
+        GS->CurrentPhase = EGamePhase::GameOver;
+        UE_LOG(LogTemp, Warning, TEXT("GAME OVER - Winner: Human (all AI units eliminated)"));
+        return;
+    }
 
     UE_LOG(LogTemp, Warning, TEXT("CheckGameOver: HumanConsec=%d AIConsec=%d"),
         GS->HumanConsecutiveTowerTurns, GS->AIConsecutiveTowerTurns);
