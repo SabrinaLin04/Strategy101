@@ -112,13 +112,6 @@ public:
     virtual int32 PerformAttack_Implementation(AActor* Target) override;
     virtual bool ReceiveDamage_Implementation(int32 DamageAmount) override;
     virtual bool IsTargetInRange_Implementation(AActor* Target) override;
-    virtual int32 GetCounterAttackDamage_Implementation() override;
-
-    // --- IMovable ---
-    virtual bool MoveTo_Implementation(int32 DestX, int32 DestY) override;
-    virtual TArray<FVector2D> GetReachableCells_Implementation() override;
-    virtual int32 GetMovementCost_Implementation(int32 FromElevation, int32 ToElevation) override;
-    virtual bool IsCellWalkable_Implementation(int32 GridX, int32 GridY) override;
 
 protected:
     virtual void BeginPlay() override;

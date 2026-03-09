@@ -49,6 +49,7 @@ void UTowerControlSystem::EvaluateTowers(ATurnBasedGameMode* GM, ATurnBasedGameS
     }
 
     GS->UpdateTowerCounts(HumanControlled, AIControlled);
+    GM->RefreshHUD();
 
     UE_LOG(LogTemp, Warning, TEXT("Towers - Human: %d | AI: %d"), HumanControlled, AIControlled);
 }

@@ -97,9 +97,23 @@ bool ABaseUnit::IsTargetInRange_Implementation(AActor* Target)
     //per il range usiamo Manhattan senza costo doppio in salita
     if (AttackType == EAttackType::Ranged)
     {
-        //Sniper: distanza Manhattan pura, oltrepassa acqua
         int32 Dist = FMath::Abs(GridX - TargetUnit->GridX) + FMath::Abs(GridY - TargetUnit->GridY);
-        return Dist <= AttackRange;
+        if (Dist > AttackRange) return false;
+
+        int32 DX = TargetUnit->GridX - GridX;
+        int32 DY = TargetUnit->GridY - GridY;
+        int32 Steps = FMath::Max(FMath::Abs(DX), FMath::Abs(DY));
+
+        for (int32 i = 1; i < Steps; i++)
+        {
+            int32 CX = GridX + FMath::RoundToInt((float)DX * i / Steps);
+            int32 CY = GridY + FMath::RoundToInt((float)DY * i / Steps);
+            AGridCell* Mid = Grid->GetCell(CX, CY);
+            if (Mid && Mid->ElevationLevel > MyCell->ElevationLevel)
+                return false;
+        }
+
+        return true;
     }
     else
     {
@@ -126,53 +140,71 @@ int32 ABaseUnit::PerformAttack_Implementation(AActor* Target)
         UE_LOG(LogTemp, Warning, TEXT("%s was eliminated!"), *TargetUnit->GetName());
         TargetUnit->SetActorHiddenInGame(true);
 
-        //libera la cella occupata
         ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
         if (GM)
         {
             AGridCell* Cell = GM->GetGridManager()->GetCell(TargetUnit->GridX, TargetUnit->GridY);
             if (Cell) Cell->bIsOccupied = false;
         }
+
+        ABaseUnit* UnitToRespawn = TargetUnit;
+        ATurnBasedGameMode* GMRef = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+        if (GMRef)
+        {
+            FTimerHandle RespawnTimer;
+            GMRef->GetWorldTimerManager().SetTimer(RespawnTimer, [UnitToRespawn, GMRef]()
+                {
+                    if (!UnitToRespawn) return;
+                    UnitToRespawn->Respawn();
+
+                    AGridCell* SpawnCell = GMRef->GetGridManager()->GetCell(
+                        UnitToRespawn->SpawnGridX, UnitToRespawn->SpawnGridY);
+                    if (SpawnCell)
+                    {
+                        FVector WorldPos = SpawnCell->GetActorLocation();
+                        WorldPos.Z += 60.f;
+                        UnitToRespawn->SetActorLocation(WorldPos);
+                    }
+
+                    UE_LOG(LogTemp, Warning, TEXT("%s respawned at (%d,%d)"),
+                        *UnitToRespawn->GetName(),
+                        UnitToRespawn->SpawnGridX, UnitToRespawn->SpawnGridY);
+                }, 2.f, false);
+        }
+    }
+
+    //contrattacco: solo se l'attaccante è uno Sniper
+    if (AttackType == EAttackType::Ranged)
+    {
+        int32 Dist = FMath::Abs(GridX - TargetUnit->GridX) + FMath::Abs(GridY - TargetUnit->GridY);
+        bool bTargetIsSniper = (TargetUnit->AttackType == EAttackType::Ranged);
+        bool bTargetIsBrawlerAdjacent = (TargetUnit->AttackType == EAttackType::Melee && Dist == 1);
+
+        if (bTargetIsSniper || bTargetIsBrawlerAdjacent)
+        {
+            int32 CounterDamage = FMath::RandRange(1, 3);
+            bool bAttackerDied = TakeDamage_Unit(CounterDamage);
+
+            UE_LOG(LogTemp, Warning, TEXT("%s received counter-attack damage: %d (HP left: %d)"),
+                *GetName(), CounterDamage, CurrentHP);
+
+            if (bAttackerDied)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("%s was eliminated by counter-attack!"), *GetName());
+                SetActorHiddenInGame(true);
+
+                ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+                if (GM)
+                {
+                    AGridCell* Cell = GM->GetGridManager()->GetCell(GridX, GridY);
+                    if (Cell) Cell->bIsOccupied = false;
+                }
+            }
+        }
     }
 
     bHasAttacked = true;
     return Damage;
-}
-
-int32 ABaseUnit::GetCounterAttackDamage_Implementation()
-{
-    // Placeholder — logica contrattacco al Giorno 24
-    return 0;
-}
-
-// --- IMovable ---
-
-bool ABaseUnit::MoveTo_Implementation(int32 DestX, int32 DestY)
-{
-    // Placeholder — logica completa al Giorno 16
-    GridX = DestX;
-    GridY = DestY;
-    bHasMoved = true;
-    return true;
-}
-
-TArray<FVector2D> ABaseUnit::GetReachableCells_Implementation()
-{
-    // Placeholder — logica completa al Giorno 16
-    return TArray<FVector2D>();
-}
-
-int32 ABaseUnit::GetMovementCost_Implementation(int32 FromElevation, int32 ToElevation)
-{
-    // Piano o discesa = 1, salita = 2
-    if (ToElevation > FromElevation) return 2;
-    return 1;
-}
-
-bool ABaseUnit::IsCellWalkable_Implementation(int32 InGridX, int32 InGridY)
-{
-    // Placeholder — logica completa al Giorno 16
-    return true;
 }
 
 void ABaseUnit::Respawn()

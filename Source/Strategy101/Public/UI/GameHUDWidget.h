@@ -37,4 +37,10 @@ public:
 
     UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
     class UTextBlock* AITowersLabel;
+
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    class UScrollBox* MoveScrollBox;
+
+    UFUNCTION(BlueprintCallable)
+    void AddMoveEntry(const FString& Entry);
 };

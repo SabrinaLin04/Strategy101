@@ -115,6 +115,13 @@ void ATurnBasedGameMode::PerformCoinFlip()
         }, 3.f, false);
 }
 
+void ATurnBasedGameMode::LogMove(const FString& Entry)
+{
+    UE_LOG(LogTemp, Warning, TEXT("Move: %s"), *Entry);
+    if (GameHUDWidgetRef)
+        GameHUDWidgetRef->AddMoveEntry(Entry);
+}
+
 void ATurnBasedGameMode::HighlightHumanPlacementZone()
 {
     if (!GridManagerRef) return;
@@ -590,6 +597,13 @@ void ATurnBasedGameMode::MoveUnitToCell(ABaseUnit* Unit, int32 DestX, int32 Dest
     if (Path.IsEmpty()) return;
 
     DeselectUnit();
+    //formato: HP/AI: S/B CellOrig -> CellDest
+    ATurnBasedGameState* GS = GetTurnGameState();
+    FString Player = (Unit->UnitOwner == EOwner::Human) ? TEXT("HP") : TEXT("AI");
+    FString UnitType = Unit->IsA<ASniper>() ? TEXT("S") : TEXT("B");
+    FString From = FString::Printf(TEXT("%c%d"), 'A' + Unit->GridX, Unit->GridY);
+    FString To = FString::Printf(TEXT("%c%d"), 'A' + DestX, DestY);
+    LogMove(FString::Printf(TEXT("%s: %s %s -> %s"), *Player, *UnitType, *From, *To));
     StartStepMovement(Unit, Path);
 }
 
@@ -602,6 +616,10 @@ void ATurnBasedGameMode::StartStepMovement(ABaseUnit* Unit, TArray<FIntPoint> Pa
     //libera la cella di partenza
     AGridCell* OldCell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
     if (OldCell) OldCell->bIsOccupied = false;
+
+    //se è l'AI, mostra il range di movimento in cyan
+    if (bIsAIMoving)
+        ShowMovementRange(Unit);
 
     //timer: uno step ogni 0.2 secondi
     GetWorldTimerManager().SetTimer(StepTimer, this,
@@ -638,16 +656,16 @@ void ATurnBasedGameMode::DoMovementStep()
 
                 if (AttackableTargets.IsEmpty())
                 {
-                    ClearMovementRange(); //nasconde il range arancione se nessun nemico attaccabile
-                    MovingUnit->bHasAttacked = true;
-                    HumanUnitsActedSet.Add(MovingUnit);
-                    MovingUnit = nullptr;
-                    MovementPath.Empty();
-                    CurrentPathStep = 0;
-                    ATurnBasedGameState* GS = GetTurnGameState();
-                    if (GS && HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
-                        EndTurn();
-                    return;
+                    //ClearMovementRange(); //nasconde il range arancione se nessun nemico attaccabile
+                    //MovingUnit->bHasAttacked = true;
+                   // HumanUnitsActedSet.Add(MovingUnit);
+                   // MovingUnit = nullptr;
+                   // MovementPath.Empty();
+                  //  CurrentPathStep = 0;
+                  //  ATurnBasedGameState* GS = GetTurnGameState();
+                   // if (GS && HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
+                  //      EndTurn();
+                  //  return;
                 }
                 else
                 {
@@ -732,7 +750,6 @@ void ATurnBasedGameMode::StartAITurn()
 
 void ATurnBasedGameMode::ProcessNextAIUnit()
 {
-    UE_LOG(LogTemp, Warning, TEXT("ProcessNextAIUnit: queue size = %d"), AIUnitQueue.Num());
     if (AIUnitQueue.IsEmpty())
     {
         EndTurn();
@@ -819,29 +836,36 @@ void ATurnBasedGameMode::AIAttackIfPossible(ABaseUnit* Unit)
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
+    ClearMovementRange();
+    ShowAttackRange(Unit);
+
     for (ABaseUnit* Enemy : GS->HumanUnits)
     {
         if (!Enemy || !Enemy->IsAlive()) continue;
         if (IAttackable::Execute_IsTargetInRange(Unit, Enemy))
         {
             IAttackable::Execute_PerformAttack(Unit, Enemy);
+            RefreshHUD();
             UE_LOG(LogTemp, Warning, TEXT("AI unit attacked enemy at (%d,%d)"), Enemy->GridX, Enemy->GridY);
             break;
         }
     }
 
     FTimerHandle DelayTimer;
-    GetWorldTimerManager().SetTimer(DelayTimer, this, &ATurnBasedGameMode::ProcessNextAIUnit, 0.5f, false);
+    GetWorldTimerManager().SetTimer(DelayTimer, [this]()
+        {
+            ClearMovementRange();
+            ClearAttackRange();
+            ProcessNextAIUnit();
+        }, 0.8f, false);
 }
 
 void ATurnBasedGameMode::ShowAttackRange(ABaseUnit* Unit)
 {
     ClearAttackRange();
     if (!Unit || !GridManagerRef) return;
-
     AGridCell* MyCell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
     if (!MyCell) return;
-
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
 
@@ -855,14 +879,34 @@ void ATurnBasedGameMode::ShowAttackRange(ABaseUnit* Unit)
             if (Cell->ElevationLevel > MyCell->ElevationLevel) continue;
 
             int32 Dist = FMath::Abs(X - Unit->GridX) + FMath::Abs(Y - Unit->GridY);
-
             if (Unit->AttackType == EAttackType::Melee && Dist != 1) continue;
             if (Unit->AttackType == EAttackType::Ranged && Dist > Unit->AttackRange) continue;
+
+            //line-of-sight per Ranged
+            if (Unit->AttackType == EAttackType::Ranged)
+            {
+                int32 DX = X - Unit->GridX;
+                int32 DY = Y - Unit->GridY;
+                int32 Steps = FMath::Max(FMath::Abs(DX), FMath::Abs(DY));
+                bool bBlocked = false;
+
+                for (int32 i = 1; i < Steps; i++)
+                {
+                    int32 CX = Unit->GridX + FMath::RoundToInt((float)DX * i / Steps);
+                    int32 CY = Unit->GridY + FMath::RoundToInt((float)DY * i / Steps);
+                    AGridCell* Mid = GridManagerRef->GetCell(CX, CY);
+                    if (Mid && Mid->ElevationLevel > MyCell->ElevationLevel)
+                    {
+                        bBlocked = true;
+                        break;
+                    }
+                }
+                if (bBlocked) continue;
+            }
 
             UMaterialInstanceDynamic* DynMat = Cell->GetCellDynMat();
             if (DynMat)
                 DynMat->SetVectorParameterValue(TEXT("BaseColor"), FLinearColor(1.f, 0.3f, 0.f));
-
             MovementHighlightedCells.Add(Cell);
         }
     }
@@ -892,14 +936,17 @@ void ATurnBasedGameMode::ExecuteAttack(ABaseUnit* Attacker, ABaseUnit* Target)
 {
     if (!Attacker || !Target) return;
 
-    IAttackable::Execute_PerformAttack(Attacker, Target);
+    FString Player = (Attacker->UnitOwner == EOwner::Human) ? TEXT("HP") : TEXT("AI");
+    FString UnitType = Attacker->IsA<ASniper>() ? TEXT("S") : TEXT("B");
+    FString TargetCell = FString::Printf(TEXT("%c%d"), 'A' + Target->GridX, Target->GridY);
+    int32 Dmg = IAttackable::Execute_PerformAttack(Attacker, Target);
+    LogMove(FString::Printf(TEXT("%s: %s %s %d"), *Player, *UnitType, *TargetCell, Dmg));
+
+    RefreshHUD();
     Attacker->bHasAttacked = true;
-
-    ClearMovementRange(); //rimuove highlight arancione e cyan
-    ClearAttackRange();   //svuota AttackableTargets
-
+    ClearMovementRange();
+    ClearAttackRange();
     HumanUnitsActedSet.Add(Attacker);
-
     if (HumanUnitsActedSet.Num() >= GetTurnGameState()->HumanUnits.Num())
         EndTurn();
 }

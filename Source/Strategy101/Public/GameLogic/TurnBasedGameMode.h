@@ -115,6 +115,9 @@ public:
 
     void RefreshHUD();
 
+    //aggiunge una mossa allo storico nel formato delle specifiche
+    void LogMove(const FString& Entry);
+
 protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;
