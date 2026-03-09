@@ -1,5 +1,6 @@
 #include "UI/GameHUDWidget.h"
 #include "GameLogic/TurnBasedGameMode.h"
+#include "Components/TextBlock.h"
 #include "Kismet/GameplayStatics.h"
 
 void UGameHUDWidget::OnEndTurnClicked()
@@ -14,4 +15,19 @@ void UGameHUDWidget::OnConfirmPositionClicked()
     ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(
         UGameplayStatics::GetGameMode(GetWorld()));
     if (GM) GM->HumanConfirmPosition();
+}
+
+void UGameHUDWidget::UpdateHUD(const FString& TurnText,
+    const FString& HumanUnitsText,
+    const FString& AIUnitsText,
+    int32 HumanTowers,
+    int32 AITowers)
+{
+    if (TurnLabel)       TurnLabel->SetText(FText::FromString(TurnText));
+    if (HumanUnitsLabel) HumanUnitsLabel->SetText(FText::FromString(HumanUnitsText));
+    if (AIUnitsLabel)    AIUnitsLabel->SetText(FText::FromString(AIUnitsText));
+    if (HumanTowersLabel) HumanTowersLabel->SetText(
+        FText::FromString(FString::Printf(TEXT("HP Towers: %d"), HumanTowers)));
+    if (AITowersLabel)   AITowersLabel->SetText(
+        FText::FromString(FString::Printf(TEXT("AI Towers: %d"), AITowers)));
 }

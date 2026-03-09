@@ -113,6 +113,8 @@ public:
     //chiamato dal bottone Confirm Position
     void HumanConfirmPosition();
 
+    void RefreshHUD();
+
 protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;

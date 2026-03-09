@@ -13,4 +13,28 @@ public:
 
     UFUNCTION(BlueprintCallable)
     void OnConfirmPositionClicked();
+
+    //aggiorna tutti i valori visualizzati nell'HUD
+    UFUNCTION(BlueprintCallable)
+    void UpdateHUD(const FString& TurnText,
+        const FString& HumanUnitsText,
+        const FString& AIUnitsText,
+        int32 HumanTowers,
+        int32 AITowers);
+
+    //riferimenti ai TextBlock da collegare nel Blueprint
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* TurnLabel;
+
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* HumanUnitsLabel;
+
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* AIUnitsLabel;
+
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* HumanTowersLabel;
+
+    UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+    class UTextBlock* AITowersLabel;
 };

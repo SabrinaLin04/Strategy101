@@ -336,7 +336,43 @@ void ATurnBasedGameMode::StartGamePhase()
         GameHUDWidgetRef = CreateWidget<UGameHUDWidget>(HUDController, GameHUDWidgetClass);
         if (GameHUDWidgetRef) GameHUDWidgetRef->AddToViewport();
     }
+
+    RefreshHUD();
     
+}
+
+void ATurnBasedGameMode::RefreshHUD()
+{
+    if (!GameHUDWidgetRef) return;
+
+    ATurnBasedGameState* GS = GetTurnGameState();
+    if (!GS) return;
+
+    FString TurnText = (GS->CurrentTurn == ETurnOwner::Human)
+        ? TEXT("Turn: HP") : TEXT("Turn: AI");
+
+    //costruisci stringa HP unità Human
+    FString HumanText = TEXT("HP:\n");
+    for (ABaseUnit* Unit : GS->HumanUnits)
+    {
+        if (!Unit) continue;
+        FString UnitName = Unit->IsA<ASniper>() ? TEXT("Sniper") : TEXT("Brawler");
+        HumanText += FString::Printf(TEXT("%s HP: %d/%d\n"),
+            *UnitName, Unit->CurrentHP, Unit->MaxHP);
+    }
+
+    //costruisci stringa HP unità AI
+    FString AIText = TEXT("AI:\n");
+    for (ABaseUnit* Unit : GS->AIUnits)
+    {
+        if (!Unit) continue;
+        FString UnitName = Unit->IsA<ASniper>() ? TEXT("Sniper") : TEXT("Brawler");
+        AIText += FString::Printf(TEXT("%s HP: %d/%d\n"),
+            *UnitName, Unit->CurrentHP, Unit->MaxHP);
+    }
+
+    GameHUDWidgetRef->UpdateHUD(TurnText, HumanText, AIText,
+        GS->HumanTowersControlled, GS->AITowersControlled);
 }
 
 void ATurnBasedGameMode::OnTowerClicked(ATower* Tower)
@@ -469,7 +505,10 @@ void ATurnBasedGameMode::EndTurn()
         GS->TurnNumber);
 
     if (GS->CurrentTurn == ETurnOwner::AI)
+    {
+        RefreshHUD();
         StartAITurn();
+    }
 }
 
 void ATurnBasedGameMode::SelectUnit(ABaseUnit* Unit)
@@ -886,3 +925,4 @@ ATurnBasedGameState* ATurnBasedGameMode::GetTurnGameState() const
 {
     return GetGameState<ATurnBasedGameState>();
 }
+
