@@ -32,6 +32,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "GameMode|Setup")
     void PerformCoinFlip();
 
+    UFUNCTION()
+    void OnHumanUnitTypeSelected(EAttackType SelectedType);
+
     // Chiamata quando il player umano clicca una cella per piazzare un'unità
     UFUNCTION(BlueprintCallable, Category = "GameMode|Placement")
     void OnHumanPlacementCellClicked(int32 X, int32 Y);
@@ -82,6 +85,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UCoinFlipWidget> CoinFlipWidgetClass;
 
+    UPROPERTY()
+    UCoinFlipWidget* CoinFlipWidgetRef;
+
     // Classe del widget di piazzamento
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UPlacementWidget> PlacementWidgetClass;
@@ -122,6 +128,11 @@ protected:
     // Numero unità piazzate per ogni giocatore
     int32 HumanUnitsPlaced;
     int32 AIUnitsPlaced;
+
+    bool bSniperPlaced = false;   //traccia quali unità human sono già state piazzate
+    bool bBrawlerPlaced = false;
+
+    EAttackType SelectedUnitType;
 
     // Unità attualmente selezionata dal player
     ABaseUnit* SelectedUnit;
@@ -192,8 +203,8 @@ protected:
     //nemici attualmente evidenziati come attaccabili
     TArray<ABaseUnit*> AttackableTargets;
 
-    //processa il turno della prossima unità AI nella coda
-    void ProcessNextAIUnit();
+    //sostituisce ProcessNextAIUnit con euristica composita
+    void ProcessNextAIUnitHeuristic();
 
     //attacca un nemico in range se disponibile, poi processa la prossima unità
     void AIAttackIfPossible(ABaseUnit* Unit);
@@ -222,4 +233,7 @@ protected:
     TArray<FIntPoint> MovementPath;
     int32 CurrentPathStep;
     FTimerHandle StepTimer;
+    int32 StartGridX;
+    int32 StartGridY;
+
 };

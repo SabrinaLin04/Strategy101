@@ -1,21 +1,29 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "PlacementWidget.generated.h"
 
-// Widget per la selezione del tipo di unità da piazzare
 UCLASS()
 class STRATEGY101_API UPlacementWidget : public UUserWidget
 {
     GENERATED_BODY()
 
 public:
-    // Mostra il widget con indicazione di quale unità piazzare
     UFUNCTION(BlueprintCallable, Category = "UI")
-    void ShowPlacementPrompt(const FString& UnitName);
+    void ShowUnitSelection(); //mostra i bottoni per scegliere l'unità
 
-    // Nasconde il widget
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void ShowPlacementPrompt(const FString& UnitName); //mostra prompt dopo la scelta
+
     UFUNCTION(BlueprintCallable, Category = "UI")
     void HidePlacementPrompt();
+
+protected:
+    virtual void NativeConstruct() override;
+
+    UFUNCTION()
+    void OnSniperClicked();
+
+    UFUNCTION()
+    void OnBrawlerClicked();
 };

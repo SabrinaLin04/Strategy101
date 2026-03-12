@@ -103,6 +103,38 @@ void AGridManager::GenerateGrid()
     PlaceTowers();
     EnsureConnectivity();
 
+    //label lettere asse X (A-Y) sul bordo inferiore
+    for (int32 X = 0; X < GridWidth; X++)
+    {
+        UTextRenderComponent* Label = NewObject<UTextRenderComponent>(this);
+        Label->RegisterComponent();
+        FVector Pos = GridToWorld(X, 0, 1);
+        Pos.Y += CellSize * 1.7f;  //bordo inferiore
+        Pos.Z += 50.f;
+        Label->SetWorldLocation(Pos);
+        Label->SetWorldRotation(FRotator(90.f, 90.f, 0.f));
+        Label->SetText(FText::FromString(FString::Printf(TEXT("%c"), (TCHAR)('A' + X))));
+        Label->SetTextRenderColor(FColor::White);
+        Label->SetWorldSize(60.f);
+        Label->SetHorizontalAlignment(EHTA_Center);
+    }
+
+    //label numeri asse Y (0-24) sul bordo sinistro
+    for (int32 Y = 0; Y < GridHeight; Y++)
+    {
+        UTextRenderComponent* Label = NewObject<UTextRenderComponent>(this);
+        Label->RegisterComponent();
+        FVector Pos = GridToWorld(0, Y, 1);
+        Pos.X -= CellSize * 1.5f; //bordo sinistro
+        Pos.Z += 50.f;
+        Label->SetWorldLocation(Pos);
+        Label->SetWorldRotation(FRotator(90.f, 0.f, 0.f));
+        Label->SetText(FText::FromString(FString::Printf(TEXT("%d"), Y)));
+        Label->SetTextRenderColor(FColor::White);
+        Label->SetWorldSize(60.f);
+        Label->SetHorizontalAlignment(EHTA_Center);
+    }
+    
     UE_LOG(LogTemp, Warning, TEXT("Grid generated: %d x %d cells"), GridWidth, GridHeight);
 }
 

@@ -82,26 +82,19 @@ void ATurnBasedGameMode::PerformCoinFlip()
 {
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
-
     bool bHumanWins = FMath::RandBool();
     GS->CoinFlipWinner = bHumanWins ? ETurnOwner::Human : ETurnOwner::AI;
     GS->CurrentTurn = GS->CoinFlipWinner;
     GS->CurrentPhase = EGamePhase::Placement;
     PlacementTurn = GS->CoinFlipWinner;
-
-    FString Winner = bHumanWins ? TEXT("Human") : TEXT("AI");
+    FString Winner = bHumanWins ? TEXT("HP") : TEXT("AI");
     UE_LOG(LogTemp, Warning, TEXT("Coin flip: %s wins!"), *Winner);
 
-    APlayerController* PC = GetWorld()->GetFirstPlayerController();
-    if (!PC || !CoinFlipWidgetClass) return;
+    //mostra risultato nel widget già in viewport
+    if (CoinFlipWidgetRef)
+        CoinFlipWidgetRef->ShowResult(Winner);
 
-    UCoinFlipWidget* Widget = CreateWidget<UCoinFlipWidget>(PC, CoinFlipWidgetClass);
-    if (Widget)
-    {
-        Widget->AddToViewport();
-        Widget->ShowResult(Winner);
-    }
-
+    //avvia placement dopo 3 secondi (stesso delay di HideWidget)
     FTimerHandle PlacementTimer;
     GetWorldTimerManager().SetTimer(PlacementTimer, [this]()
         {
@@ -216,16 +209,23 @@ void ATurnBasedGameMode::ShowPlacementWidget()
 {
     APlayerController* PC = GetWorld()->GetFirstPlayerController();
     if (!PC || !PlacementWidgetClass) return;
-
     if (!PlacementWidgetRef)
     {
         PlacementWidgetRef = CreateWidget<UPlacementWidget>(PC, PlacementWidgetClass);
         if (PlacementWidgetRef) PlacementWidgetRef->AddToViewport();
     }
-
-    FString UnitName = (HumanUnitsPlaced == 0) ? TEXT("Sniper") : TEXT("Brawler");
-    if (PlacementWidgetRef) PlacementWidgetRef->ShowPlacementPrompt(UnitName);
-
+    if (HumanUnitsPlaced == 0)
+    {
+        PlacementWidgetRef->ShowUnitSelection();
+    }
+    else
+    {
+        EAttackType Remaining = (SelectedUnitType == EAttackType::Sniper)
+            ? EAttackType::Brawler : EAttackType::Sniper;
+        FString UnitName = (Remaining == EAttackType::Sniper) ? TEXT("Sniper") : TEXT("Brawler");
+        SelectedUnitType = Remaining;
+        PlacementWidgetRef->ShowPlacementPrompt(UnitName);
+    }
     PC->bShowMouseCursor = true;
     PC->SetInputMode(FInputModeGameAndUI());
 }
@@ -348,6 +348,15 @@ void ATurnBasedGameMode::StartGamePhase()
     
 }
 
+void ATurnBasedGameMode::OnHumanUnitTypeSelected(EAttackType SelectedType)
+{
+    FString UnitName = (SelectedType == EAttackType::Sniper) ? TEXT("Sniper") : TEXT("Brawler");
+    SelectedUnitType = SelectedType;
+    if (PlacementWidgetRef)
+        PlacementWidgetRef->ShowPlacementPrompt(UnitName);
+    HighlightHumanPlacementZone();
+}
+
 void ATurnBasedGameMode::RefreshHUD()
 {
     if (!GameHUDWidgetRef) return;
@@ -460,13 +469,15 @@ void ATurnBasedGameMode::OnHumanGameCellClicked(int32 X, int32 Y)
         {
             if (SelectedUnit == Unit)
             {
-                //deseleziona: se ha già mosso e nessun nemico in range, conta l'azione
                 if (Unit->bHasMoved && AttackableTargets.IsEmpty())
                 {
                     DeselectUnit();
                     HumanUnitsActedSet.Add(Unit);
                     ATurnBasedGameState* GS2 = GetTurnGameState();
-                    if (GS2 && HumanUnitsActedSet.Num() >= GS2->HumanUnits.Num())
+                    int32 AliveHuman = 0;
+                    for (ABaseUnit* U : GS2->HumanUnits)
+                        if (U && U->IsAlive()) AliveHuman++;
+                    if (HumanUnitsActedSet.Num() >= AliveHuman)
                         EndTurn();
                 }
                 else
@@ -486,36 +497,26 @@ void ATurnBasedGameMode::EndTurn()
 {
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
-
     DeselectUnit();
-    HumanUnitsActedSet.Empty(); //reset set unità che hanno agito
-
+    HumanUnitsActedSet.Empty();
     TArray<ABaseUnit*>& CurrentUnits = (GS->CurrentTurn == ETurnOwner::Human)
         ? GS->HumanUnits : GS->AIUnits;
     for (ABaseUnit* Unit : CurrentUnits)
         if (Unit) Unit->ResetTurnState();
-
-    //valuta torri a fine turno
     if (TowerControlSystem)
         TowerControlSystem->EvaluateTowers(this, GS);
     else
         UE_LOG(LogTemp, Warning, TEXT("TowerControlSystem is NULL!"));
-
     CheckGameOver();
     if (GS->CurrentPhase == EGamePhase::GameOver) return;
-
     GS->SwitchTurn();
-
     UE_LOG(LogTemp, Warning, TEXT("EndTurn called: CurrentTurn=%s, HumanActedSet=%d, Turn=%d"),
         GS->CurrentTurn == ETurnOwner::Human ? TEXT("Human") : TEXT("AI"),
         HumanUnitsActedSet.Num(),
         GS->TurnNumber);
-
+    RefreshHUD();
     if (GS->CurrentTurn == ETurnOwner::AI)
-    {
-        RefreshHUD();
         StartAITurn();
-    }
 }
 
 void ATurnBasedGameMode::SelectUnit(ABaseUnit* Unit)
@@ -601,8 +602,8 @@ void ATurnBasedGameMode::MoveUnitToCell(ABaseUnit* Unit, int32 DestX, int32 Dest
     ATurnBasedGameState* GS = GetTurnGameState();
     FString Player = (Unit->UnitOwner == EOwner::Human) ? TEXT("HP") : TEXT("AI");
     FString UnitType = Unit->IsA<ASniper>() ? TEXT("S") : TEXT("B");
-    FString From = FString::Printf(TEXT("%c%d"), 'A' + Unit->GridX, Unit->GridY);
-    FString To = FString::Printf(TEXT("%c%d"), 'A' + DestX, DestY);
+    FString From = FString::Printf(TEXT("%c%d"), (TCHAR)('A' + Unit->GridX), Unit->GridY);
+    FString To = FString::Printf(TEXT("%c%d"), (TCHAR)('A' + DestX), DestY);
     LogMove(FString::Printf(TEXT("%s: %s %s -> %s"), *Player, *UnitType, *From, *To));
     StartStepMovement(Unit, Path);
 }
@@ -612,6 +613,8 @@ void ATurnBasedGameMode::StartStepMovement(ABaseUnit* Unit, TArray<FIntPoint> Pa
     MovingUnit = Unit;
     MovementPath = Path;
     CurrentPathStep = 0;
+    StartGridX = Unit->GridX;
+    StartGridY = Unit->GridY;
 
     //libera la cella di partenza
     AGridCell* OldCell = GridManagerRef->GetCell(Unit->GridX, Unit->GridY);
@@ -641,6 +644,11 @@ void ATurnBasedGameMode::DoMovementStep()
             if (bIsAIMoving)
             {
                 //AI: attacca se possibile poi processa la prossima unità
+                //logga il movimento AI
+                FString From = FString::Printf(TEXT("%c%d"), 'A' + StartGridX, StartGridY);
+                FString To = FString::Printf(TEXT("%c%d"), 'A' + MovingUnit->GridX, MovingUnit->GridY);
+                FString UnitType = MovingUnit->IsA<ASniper>() ? TEXT("S") : TEXT("B");
+                LogMove(FString::Printf(TEXT("AI: %s %s -> %s"), *UnitType, *From, *To));
                 ABaseUnit* JustMoved = MovingUnit;
                 MovingUnit = nullptr;
                 MovementPath.Empty();
@@ -656,16 +664,19 @@ void ATurnBasedGameMode::DoMovementStep()
 
                 if (AttackableTargets.IsEmpty())
                 {
-                    //ClearMovementRange(); //nasconde il range arancione se nessun nemico attaccabile
-                    //MovingUnit->bHasAttacked = true;
-                   // HumanUnitsActedSet.Add(MovingUnit);
-                   // MovingUnit = nullptr;
-                   // MovementPath.Empty();
-                  //  CurrentPathStep = 0;
-                  //  ATurnBasedGameState* GS = GetTurnGameState();
-                   // if (GS && HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
-                  //      EndTurn();
-                  //  return;
+                    ClearMovementRange();
+                    MovingUnit->bHasAttacked = true;
+                    HumanUnitsActedSet.Add(MovingUnit);
+                    MovingUnit = nullptr;
+                    MovementPath.Empty();
+                    CurrentPathStep = 0;
+                    ATurnBasedGameState* GS = GetTurnGameState();
+                    int32 AliveHuman = 0;
+                    for (ABaseUnit* U : GS->HumanUnits)
+                        if (U && U->IsAlive()) AliveHuman++;
+                    if (HumanUnitsActedSet.Num() >= AliveHuman)
+                        EndTurn();
+                    return;
                 }
                 else
                 {
@@ -713,24 +724,22 @@ void ATurnBasedGameMode::HumanConfirmPosition()
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS || GS->CurrentTurn != ETurnOwner::Human) return;
     if (!SelectedUnit) return;
-
     SelectedUnit->bHasMoved = true;
     ClearMovementRange();
-
     ShowAttackRange(SelectedUnit);
-
     if (AttackableTargets.IsEmpty())
     {
-        //nessun nemico attaccabile: unità ha finito le sue azioni
         ClearAttackRange();
         SelectedUnit->bHasAttacked = true;
         HumanUnitsActedSet.Add(SelectedUnit);
         ABaseUnit* Done = SelectedUnit;
         DeselectUnit();
-        if (HumanUnitsActedSet.Num() >= GS->HumanUnits.Num())
+        int32 AliveHuman = 0;
+        for (ABaseUnit* U : GS->HumanUnits)
+            if (U && U->IsAlive()) AliveHuman++;
+        if (HumanUnitsActedSet.Num() >= AliveHuman)
             EndTurn();
     }
-    //altrimenti rimane selezionata e mostra il range arancione
 }
 
 void ATurnBasedGameMode::StartAITurn()
@@ -745,25 +754,17 @@ void ATurnBasedGameMode::StartAITurn()
     UE_LOG(LogTemp, Warning, TEXT("AI turn started - %d units"), AIUnitQueue.Num());
 
     FTimerHandle DelayTimer;
-    GetWorldTimerManager().SetTimer(DelayTimer, this, &ATurnBasedGameMode::ProcessNextAIUnit, 0.8f, false);
+    GetWorldTimerManager().SetTimer(DelayTimer, this, &ATurnBasedGameMode::ProcessNextAIUnitHeuristic, 0.8f, false);
 }
 
-void ATurnBasedGameMode::ProcessNextAIUnit()
+void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
 {
-    if (AIUnitQueue.IsEmpty())
-    {
-        EndTurn();
-        return;
-    }
+    if (AIUnitQueue.IsEmpty()) { EndTurn(); return; }
 
     ABaseUnit* Unit = AIUnitQueue[0];
     AIUnitQueue.RemoveAt(0);
 
-    if (!Unit || !Unit->IsAlive())
-    {
-        ProcessNextAIUnit();
-        return;
-    }
+    if (!Unit || !Unit->IsAlive()) { ProcessNextAIUnitHeuristic(); return; }
 
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
@@ -771,43 +772,144 @@ void ATurnBasedGameMode::ProcessNextAIUnit()
     TMap<FIntPoint, int32> Reachable = Pathfinding->GetReachableCells(
         GridManagerRef, FIntPoint(Unit->GridX, Unit->GridY), Unit->MaxMovement);
 
-    FIntPoint BestTarget(-1, -1);
-    int32 BestScore = INT_MAX;
+    bool bEnemyHasTwoTowers = (GS->HumanTowersControlled >= 2);
+    bool bLowHP = (Unit->CurrentHP < Unit->MaxHP * 0.5f);
+    bool bIsSniper = (Unit->AttackType == EAttackType::Sniper);
 
-    //priorità 1: torre neutrale — cerca la cella raggiungibile più vicina a una torre libera
-    for (ATower* Tower : GridManagerRef->GetTowers())
+    //controlla se l'unità è già nella zona di cattura di una torre contestata
+    bool bAlreadyInContestedZone = false;
+    if (bLowHP && !bIsSniper)
     {
-        if (!Tower || Tower->OwnerPlayer != ETowerOwner::None) continue;
-        FIntPoint TowerPos(Tower->GridX, Tower->GridY);
-
-        for (auto& Pair : Reachable)
+        for (ATower* Tower : GridManagerRef->GetTowers())
         {
-            int32 Dist = FMath::Abs(Pair.Key.X - TowerPos.X) + FMath::Abs(Pair.Key.Y - TowerPos.Y);
-            if (Dist < BestScore) { BestScore = Dist; BestTarget = Pair.Key; }
+            if (!Tower) continue;
+            int32 DX = FMath::Abs(Unit->GridX - Tower->GridX);
+            int32 DY = FMath::Abs(Unit->GridY - Tower->GridY);
+            if (FMath::Max(DX, DY) <= Tower->CaptureRadius)
+            {
+                bAlreadyInContestedZone = true;
+                break;
+            }
         }
     }
 
-    //priorità 2: se nessuna torre libera, muoviti verso il nemico più vicino
-    if (BestTarget == FIntPoint(-1, -1))
+    //se Brawler con HP basse è già nella zona: rimane fermo e attacca
+    if (bAlreadyInContestedZone)
     {
-        ABaseUnit* NearestEnemy = nullptr;
-        int32 MinDist = INT_MAX;
+        bIsAIMoving = false;
+        AIAttackIfPossible(Unit);
+        return;
+    }
+
+    //trova il nemico più debole (HP più basse)
+    ABaseUnit* WeakestEnemy = nullptr;
+    int32 MinHP = INT_MAX;
+    for (ABaseUnit* Enemy : GS->HumanUnits)
+    {
+        if (!Enemy || !Enemy->IsAlive()) continue;
+        if (Enemy->CurrentHP < MinHP) { MinHP = Enemy->CurrentHP; WeakestEnemy = Enemy; }
+    }
+
+    //controlla se lo Sniper nemico è nella zona di una torre da contestare
+    bool bSniperInTowerZone = false;
+    ATower* TargetTowerWithSniper = nullptr;
+    if (bLowHP && !bIsSniper && WeakestEnemy && WeakestEnemy->AttackType == EAttackType::Sniper)
+    {
+        for (ATower* Tower : GridManagerRef->GetTowers())
+        {
+            if (!Tower) continue;
+            int32 DX = FMath::Abs(WeakestEnemy->GridX - Tower->GridX);
+            int32 DY = FMath::Abs(WeakestEnemy->GridY - Tower->GridY);
+            if (FMath::Max(DX, DY) <= Tower->CaptureRadius)
+            {
+                bSniperInTowerZone = true;
+                TargetTowerWithSniper = Tower;
+                break;
+            }
+        }
+    }
+
+    FIntPoint BestTarget(-1, -1);
+    float BestScore = FLT_MAX;
+
+    for (auto& Pair : Reachable)
+    {
+        if (Pair.Key == FIntPoint(Unit->GridX, Unit->GridY)) continue;
+        float Score = 0.f;
+
+        //distanza dal nemico più debole
+        float WeakEnemyDist = FLT_MAX;
+        if (WeakestEnemy)
+            WeakEnemyDist = FMath::Abs(Pair.Key.X - WeakestEnemy->GridX) + FMath::Abs(Pair.Key.Y - WeakestEnemy->GridY);
+
+        //distanza dal nemico più vicino
+        float MinEnemyDist = FLT_MAX;
         for (ABaseUnit* Enemy : GS->HumanUnits)
         {
             if (!Enemy || !Enemy->IsAlive()) continue;
-            int32 Dist = FMath::Abs(Unit->GridX - Enemy->GridX) + FMath::Abs(Unit->GridY - Enemy->GridY);
-            if (Dist < MinDist) { MinDist = Dist; NearestEnemy = Enemy; }
+            float D = FMath::Abs(Pair.Key.X - Enemy->GridX) + FMath::Abs(Pair.Key.Y - Enemy->GridY);
+            if (D < MinEnemyDist) MinEnemyDist = D;
         }
 
-        if (NearestEnemy)
+        if (bEnemyHasTwoTowers)
         {
-            FIntPoint EnemyPos(NearestEnemy->GridX, NearestEnemy->GridY);
-            for (auto& Pair : Reachable)
+            float MinTowerDist = FLT_MAX;
+            for (ATower* Tower : GridManagerRef->GetTowers())
             {
-                int32 Dist = FMath::Abs(Pair.Key.X - EnemyPos.X) + FMath::Abs(Pair.Key.Y - EnemyPos.Y);
-                if (Dist < BestScore) { BestScore = Dist; BestTarget = Pair.Key; }
+                if (!Tower || Tower->OwnerPlayer != ETowerOwner::Human) continue;
+                float D = FMath::Abs(Pair.Key.X - Tower->GridX) + FMath::Abs(Pair.Key.Y - Tower->GridY);
+                if (D < MinTowerDist) MinTowerDist = D;
+            }
+            Score = MinTowerDist * 3.f;
+        }
+        else if (bLowHP && !bIsSniper && bSniperInTowerZone && TargetTowerWithSniper)
+        {
+            float TowerDist = FMath::Abs(Pair.Key.X - TargetTowerWithSniper->GridX)
+                + FMath::Abs(Pair.Key.Y - TargetTowerWithSniper->GridY);
+            Score = TowerDist * 2.f + WeakEnemyDist * 1.f;
+        }
+        else if (bLowHP && !bIsSniper)
+        {
+            Score = WeakEnemyDist * 2.f + Pair.Value * 1.f;
+        }
+        else
+        {
+            float MinNeutralTowerDist = FLT_MAX;
+            for (ATower* Tower : GridManagerRef->GetTowers())
+            {
+                if (!Tower || Tower->OwnerPlayer != ETowerOwner::None) continue;
+                float D = FMath::Abs(Pair.Key.X - Tower->GridX) + FMath::Abs(Pair.Key.Y - Tower->GridY);
+                if (D < MinNeutralTowerDist) MinNeutralTowerDist = D;
+            }
+            Score += MinNeutralTowerDist * 2.f;
+            if (bIsSniper)
+            {
+                float TargetDist = (float)Unit->AttackRange;
+                Score += FMath::Abs(MinEnemyDist - TargetDist) * 1.5f;
+            }
+            else
+            {
+                Score += WeakEnemyDist * 1.f;
+            }
+            Score += Pair.Value * 1.f;
+        }
+
+        //bonus forte se da questa cella posso attaccare direttamente un nemico
+        for (ABaseUnit* Enemy : GS->HumanUnits)
+        {
+            if (!Enemy || !Enemy->IsAlive()) continue;
+            int32 AttackDist = FMath::Abs(Pair.Key.X - Enemy->GridX) + FMath::Abs(Pair.Key.Y - Enemy->GridY);
+            if (Unit->AttackType == EAttackType::Brawler && AttackDist == 1)
+            {
+                Score -= 10.f; break;
+            }
+            if (Unit->AttackType == EAttackType::Sniper && AttackDist <= Unit->AttackRange)
+            {
+                Score -= 10.f; break;
             }
         }
+
+        if (Score < BestScore) { BestScore = Score; BestTarget = Pair.Key; }
     }
 
     bIsAIMoving = true;
@@ -816,15 +918,9 @@ void ATurnBasedGameMode::ProcessNextAIUnit()
     {
         TArray<FIntPoint> Path = Pathfinding->FindPath(
             GridManagerRef, CurrentPos, BestTarget, Unit->MaxMovement);
-
-        if (!Path.IsEmpty())
-        {
-            StartStepMovement(Unit, Path);
-            return;
-        }
+        if (!Path.IsEmpty()) { StartStepMovement(Unit, Path); return; }
     }
 
-    //nessun movimento possibile: prova solo ad attaccare
     bIsAIMoving = false;
     AIAttackIfPossible(Unit);
 }
@@ -844,7 +940,16 @@ void ATurnBasedGameMode::AIAttackIfPossible(ABaseUnit* Unit)
         if (!Enemy || !Enemy->IsAlive()) continue;
         if (IAttackable::Execute_IsTargetInRange(Unit, Enemy))
         {
-            IAttackable::Execute_PerformAttack(Unit, Enemy);
+            FString UnitType = Unit->IsA<ASniper>() ? TEXT("S") : TEXT("B");
+            FString TargetCell = FString::Printf(TEXT("%c%d"), (TCHAR)('A' + Enemy->GridX), Enemy->GridY);
+            int32 HPBefore = Unit->CurrentHP;
+            int32 Dmg = IAttackable::Execute_PerformAttack(Unit, Enemy);
+            LogMove(FString::Printf(TEXT("AI: %s %s %d"), *UnitType, *TargetCell, Dmg));
+            if (Unit->CurrentHP < HPBefore)
+            {
+                FString AttackerCell = FString::Printf(TEXT("%c%d"), (TCHAR)('A' + Unit->GridX), Unit->GridY);
+                LogMove(FString::Printf(TEXT("Counter: %s %s"), *UnitType, *AttackerCell));
+            }
             RefreshHUD();
             UE_LOG(LogTemp, Warning, TEXT("AI unit attacked enemy at (%d,%d)"), Enemy->GridX, Enemy->GridY);
             break;
@@ -856,7 +961,7 @@ void ATurnBasedGameMode::AIAttackIfPossible(ABaseUnit* Unit)
         {
             ClearMovementRange();
             ClearAttackRange();
-            ProcessNextAIUnit();
+            ProcessNextAIUnitHeuristic();
         }, 0.8f, false);
 }
 
@@ -879,11 +984,11 @@ void ATurnBasedGameMode::ShowAttackRange(ABaseUnit* Unit)
             if (Cell->ElevationLevel > MyCell->ElevationLevel) continue;
 
             int32 Dist = FMath::Abs(X - Unit->GridX) + FMath::Abs(Y - Unit->GridY);
-            if (Unit->AttackType == EAttackType::Melee && Dist != 1) continue;
-            if (Unit->AttackType == EAttackType::Ranged && Dist > Unit->AttackRange) continue;
+            if (Unit->AttackType == EAttackType::Brawler && Dist != 1) continue;
+            if (Unit->AttackType == EAttackType::Sniper && Dist > Unit->AttackRange) continue;
 
-            //line-of-sight per Ranged
-            if (Unit->AttackType == EAttackType::Ranged)
+            //line-of-sight per Sniper
+            if (Unit->AttackType == EAttackType::Sniper)
             {
                 int32 DX = X - Unit->GridX;
                 int32 DY = Y - Unit->GridY;
@@ -935,19 +1040,26 @@ void ATurnBasedGameMode::ClearAttackRange()
 void ATurnBasedGameMode::ExecuteAttack(ABaseUnit* Attacker, ABaseUnit* Target)
 {
     if (!Attacker || !Target) return;
-
     FString Player = (Attacker->UnitOwner == EOwner::Human) ? TEXT("HP") : TEXT("AI");
     FString UnitType = Attacker->IsA<ASniper>() ? TEXT("S") : TEXT("B");
-    FString TargetCell = FString::Printf(TEXT("%c%d"), 'A' + Target->GridX, Target->GridY);
+    FString TargetCell = FString::Printf(TEXT("%c%d"), (TCHAR)('A' + Target->GridX), Target->GridY);
+    int32 HPBefore = Attacker->CurrentHP;
     int32 Dmg = IAttackable::Execute_PerformAttack(Attacker, Target);
     LogMove(FString::Printf(TEXT("%s: %s %s %d"), *Player, *UnitType, *TargetCell, Dmg));
-
+    if (Attacker->CurrentHP < HPBefore)
+    {
+        FString AttackerCell = FString::Printf(TEXT("%c%d"), (TCHAR)('A' + Attacker->GridX), Attacker->GridY);
+        LogMove(FString::Printf(TEXT("Counter: %s %s"), *UnitType, *AttackerCell));
+    }
     RefreshHUD();
     Attacker->bHasAttacked = true;
     ClearMovementRange();
     ClearAttackRange();
     HumanUnitsActedSet.Add(Attacker);
-    if (HumanUnitsActedSet.Num() >= GetTurnGameState()->HumanUnits.Num())
+    int32 AliveHuman = 0;
+    for (ABaseUnit* U : GetTurnGameState()->HumanUnits)
+        if (U && U->IsAlive()) AliveHuman++;
+    if (HumanUnitsActedSet.Num() >= AliveHuman)
         EndTurn();
 }
 

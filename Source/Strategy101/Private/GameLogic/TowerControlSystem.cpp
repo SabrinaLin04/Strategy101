@@ -48,7 +48,7 @@ void UTowerControlSystem::EvaluateTowers(ATurnBasedGameMode* GM, ATurnBasedGameS
         else if (Tower->OwnerPlayer == ETowerOwner::AI)    AIControlled++;
     }
 
-    GS->UpdateTowerCounts(HumanControlled, AIControlled);
+    GS->UpdateTowerCounts(HumanControlled, AIControlled, GS->CurrentTurn);
     GM->RefreshHUD();
 
     UE_LOG(LogTemp, Warning, TEXT("Towers - Human: %d | AI: %d"), HumanControlled, AIControlled);

@@ -28,6 +28,9 @@ class STRATEGY101_API ATurnBasedGameState : public AGameStateBase
 public:
     ATurnBasedGameState();
 
+    bool bHumanActedThisCycle = false;
+    bool bAIActedThisCycle = false;
+
     /** Fase corrente della partita */
     UPROPERTY(BlueprintReadWrite, Category = "GameState")
     EGamePhase CurrentPhase;
@@ -75,5 +78,5 @@ public:
     void SwitchTurn();
 
     /** Incrementa il contatore torri e aggiorna i turni consecutivi */
-    void UpdateTowerCounts(int32 HumanTowers, int32 AITowers);
+    void UpdateTowerCounts(int32 HumanTowers, int32 AITowers, ETurnOwner TurnJustEnded);
 };

@@ -12,8 +12,8 @@ class ATurnBasedGameState;
 UENUM(BlueprintType)
 enum class EAttackType : uint8
 {
-    Melee   UMETA(DisplayName = "Melee"),   // Brawler - corpo a corpo
-    Ranged  UMETA(DisplayName = "Ranged")   // Sniper - distanza
+    Brawler   UMETA(DisplayName = "Brawler"), 
+    Sniper  UMETA(DisplayName = "Sniper")  
 };
 
 UENUM(BlueprintType)

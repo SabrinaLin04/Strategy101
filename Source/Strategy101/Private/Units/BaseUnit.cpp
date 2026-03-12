@@ -95,7 +95,7 @@ bool ABaseUnit::IsTargetInRange_Implementation(AActor* Target)
     if (TargetCell->ElevationLevel > MyCell->ElevationLevel) return false;
 
     //per il range usiamo Manhattan senza costo doppio in salita
-    if (AttackType == EAttackType::Ranged)
+    if (AttackType == EAttackType::Sniper)
     {
         int32 Dist = FMath::Abs(GridX - TargetUnit->GridX) + FMath::Abs(GridY - TargetUnit->GridY);
         if (Dist > AttackRange) return false;
@@ -174,11 +174,17 @@ int32 ABaseUnit::PerformAttack_Implementation(AActor* Target)
     }
 
     //contrattacco: solo se l'attaccante è uno Sniper
-    if (AttackType == EAttackType::Ranged)
+    if (AttackType == EAttackType::Sniper)
     {
         int32 Dist = FMath::Abs(GridX - TargetUnit->GridX) + FMath::Abs(GridY - TargetUnit->GridY);
-        bool bTargetIsSniper = (TargetUnit->AttackType == EAttackType::Ranged);
-        bool bTargetIsBrawlerAdjacent = (TargetUnit->AttackType == EAttackType::Melee && Dist == 1);
+        ATurnBasedGameMode* GMCounter = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
+        AGridManager* Grid = GMCounter ? GMCounter->GetGridManager() : nullptr;
+        AGridCell* MyCell = Grid ? Grid->GetCell(GridX, GridY) : nullptr;
+        AGridCell* TargetCell = Grid ? Grid->GetCell(TargetUnit->GridX, TargetUnit->GridY) : nullptr;
+
+        bool bSameElevation = MyCell && TargetCell && (MyCell->ElevationLevel == TargetCell->ElevationLevel);
+        bool bTargetIsSniper = (TargetUnit->AttackType == EAttackType::Sniper) && bSameElevation;
+        bool bTargetIsBrawlerAdjacent = (TargetUnit->AttackType == EAttackType::Brawler && Dist == 1);
 
         if (bTargetIsSniper || bTargetIsBrawlerAdjacent)
         {

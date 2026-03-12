@@ -4,7 +4,7 @@ ASniper::ASniper()
 {
     // Statistiche Sniper come da specifiche
     MaxMovement = 4;
-    AttackType = EAttackType::Ranged;
+    AttackType = EAttackType::Sniper;
     AttackRange = 10;
     MinDamage = 4;
     MaxDamage = 8;

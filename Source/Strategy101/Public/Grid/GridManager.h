@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Grid/GridCell.h"
 #include "Grid/Tower.h"
+#include "Components/TextRenderComponent.h"
 #include "GridManager.generated.h"
 
 UCLASS()

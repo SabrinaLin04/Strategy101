@@ -46,6 +46,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
     int32 CaptureRadius;
 
+    UPROPERTY(EditAnywhere, Category = "Visuals")
+    UTexture2D* TowerTexture; // texture sprite della torre
+
+    UPROPERTY()
+    UMaterialInstanceDynamic* TowerDynMat = nullptr;
+
+    UPROPERTY() UStaticMeshComponent* LeftMesh;
+    UPROPERTY() UStaticMeshComponent* RightMesh;
+    UPROPERTY() UMaterialInstanceDynamic* LeftDynMat;
+    UPROPERTY() UMaterialInstanceDynamic* RightDynMat;
+
     //cambio colore della torre in base alla sua appartenenza
     UFUNCTION(BlueprintCallable, Category = "Tower")
     void UpdateVisualState();

@@ -12,15 +12,22 @@ void UConfigWidget::OnStartGame()
 
     APlayerController* PC = GetOwningPlayer();
     if (!PC) return;
-    PC->SetInputMode(FInputModeGameOnly());
+    PC->bShowMouseCursor = true;
+    PC->SetInputMode(FInputModeUIOnly());
 
     ATurnBasedGameMode* GM = Cast<ATurnBasedGameMode>(GetWorld()->GetAuthGameMode());
     if (GM)
     {
-        // Passa i colori scelti al GameMode
         GM->HumanUnitColor = HumanColor;
         GM->AIUnitColor = AIColor;
-        GM->PerformCoinFlip();
+
+        //mostra widget con bottone — PerformCoinFlip viene chiamato al click
+        if(GM->CoinFlipWidgetClass)
+        {
+            GM->CoinFlipWidgetRef = CreateWidget<UCoinFlipWidget>(PC, GM->CoinFlipWidgetClass);
+            if (GM->CoinFlipWidgetRef)
+                GM->CoinFlipWidgetRef->AddToViewport();
+        }
     }
 }
 

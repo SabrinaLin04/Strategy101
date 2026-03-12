@@ -4,7 +4,7 @@ ABrawler::ABrawler()
 {
     // Statistiche Brawler come da specifiche
     MaxMovement = 6;
-    AttackType = EAttackType::Melee;
+    AttackType = EAttackType::Brawler;
     AttackRange = 1;
     MinDamage = 1;
     MaxDamage = 6;
