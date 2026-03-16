@@ -33,6 +33,7 @@ void ABaseUnit::SetOwnerColor()
     UE_LOG(LogTemp, Warning, TEXT("SetOwnerColor called R:%f G:%f B:%f"),
         OwnerColor.R, OwnerColor.G, OwnerColor.B);
 }
+
 void ABaseUnit::BeginPlay()
 {
     Super::BeginPlay();
@@ -69,7 +70,6 @@ bool ABaseUnit::TakeDamage_Unit(int32 DamageAmount)
     }
     return false;
 }
-
 // --- IAttackable ---
 
 bool ABaseUnit::ReceiveDamage_Implementation(int32 DamageAmount)

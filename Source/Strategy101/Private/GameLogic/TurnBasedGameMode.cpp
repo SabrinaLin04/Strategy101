@@ -161,39 +161,29 @@ void ATurnBasedGameMode::OnHumanPlacementCellClicked(int32 X, int32 Y)
 void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
 {
     if (!Cell || !GridManagerRef) return;
-
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS) return;
-
     TSubclassOf<ABaseUnit> ClassToSpawn = (HumanUnitsPlaced == 0)
         ? TSubclassOf<ABaseUnit>(SniperClass)
         : TSubclassOf<ABaseUnit>(BrawlerClass);
-
     if (!ClassToSpawn) return;
-
     FVector WorldPos = Cell->GetActorLocation();
     WorldPos.Z += 20.f;
-
     FActorSpawnParameters Params;
     Params.Owner = this;
     ABaseUnit* Unit = GetWorld()->SpawnActor<ABaseUnit>(ClassToSpawn, WorldPos, FRotator::ZeroRotator, Params);
     if (!Unit) return;
-
     Unit->GridX = Cell->GridX;
     Unit->GridY = Cell->GridY;
     Unit->SpawnGridX = Cell->GridX;
     Unit->SpawnGridY = Cell->GridY;
     Unit->UnitOwner = EOwner::Human;
     Unit->OwnerColor = HumanUnitColor;
-
     Unit->SetOwnerColor();
     Cell->bIsOccupied = true;
-
     GS->HumanUnits.Add(Unit);
     HumanUnitsPlaced++;
-
     UE_LOG(LogTemp, Warning, TEXT("Human spawned unit %d at (%d,%d)"), HumanUnitsPlaced, Cell->GridX, Cell->GridY);
-
     ClearHighlight();
     AdvancePlacementStep();
 }

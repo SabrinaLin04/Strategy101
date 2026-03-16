@@ -6,6 +6,7 @@
 #include "Units/Movable.h"
 class ATurnBasedGameMode;
 class ATurnBasedGameState;
+
 #include "BaseUnit.generated.h"
 
 
