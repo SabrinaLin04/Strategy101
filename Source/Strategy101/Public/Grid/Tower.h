@@ -1,10 +1,8 @@
 #pragma once
-
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Tower.generated.h"
 
-//stato della torre
 UENUM(BlueprintType)
 enum class ETowerState : uint8
 {
@@ -21,12 +19,10 @@ enum class ETowerOwner : uint8
     AI      UMETA(DisplayName = "AI")
 };
 
-//posizione e stato della torre
 UCLASS()
 class STRATEGY101_API ATower : public AActor
 {
     GENERATED_BODY()
-
 public:
     ATower();
 
@@ -42,27 +38,20 @@ public:
     UPROPERTY(BlueprintReadWrite, Category = "Tower")
     ETowerOwner OwnerPlayer;
 
-    //raggio di cattura
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tower")
     int32 CaptureRadius;
 
-    UPROPERTY(EditAnywhere, Category = "Visuals")
-    UTexture2D* TowerTexture; // texture sprite della torre
+    UPROPERTY(VisibleAnywhere, Category = "Components")
+    UStaticMeshComponent* TowerMesh;
+
+    UPROPERTY(VisibleAnywhere, Category = "Components")
+    UStaticMeshComponent* RightMesh;
 
     UPROPERTY()
-    UMaterialInstanceDynamic* TowerDynMat = nullptr;
+    UMaterialInstanceDynamic* TowerDynMat;
 
-    UPROPERTY() UStaticMeshComponent* LeftMesh;
-    UPROPERTY() UStaticMeshComponent* RightMesh;
-    UPROPERTY() UMaterialInstanceDynamic* LeftDynMat;
-    UPROPERTY() UMaterialInstanceDynamic* RightDynMat;
-
-    //cambio colore della torre in base alla sua appartenenza
-    UFUNCTION(BlueprintCallable, Category = "Tower")
-    void UpdateVisualState();
-
-    UFUNCTION(BlueprintCallable, Category = "Tower")
-    void EvaluateState(bool bHumanInZone, bool bAIInZone);
+    UPROPERTY()
+    UMaterialInstanceDynamic* RightDynMat;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
     FLinearColor HumanColor;
@@ -70,12 +59,15 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Colors")
     FLinearColor AIColor;
 
+    UFUNCTION(BlueprintCallable, Category = "Tower")
+    void UpdateVisualState();
+
+    UFUNCTION(BlueprintCallable, Category = "Tower")
+    void EvaluateState(bool bHumanInZone, bool bAIInZone);
+
     UFUNCTION()
     void OnTowerClicked(AActor* TouchedActor, FKey ButtonPressed);
 
 protected:
     virtual void BeginPlay() override;
-
-    UPROPERTY(VisibleAnywhere, Category = "Components")
-    UStaticMeshComponent* TowerMesh;
 };

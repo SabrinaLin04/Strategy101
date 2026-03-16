@@ -20,6 +20,9 @@ public:
     //Dijkstra: ritorna tutte le celle raggiungibili entro MaxMoveCost (usato per highlight)
     TMap<FIntPoint, int32> GetReachableCells(AGridManager* Grid, FIntPoint Start, int32 MaxMoveCost);
 
+   // Ritorna il costo reale del percorso più breve tra due punti (-1 se irraggiungibile)
+    int32 GetActualDistance(AGridManager* Grid, FIntPoint Start, FIntPoint Goal) const;
+
 private:
     //costo di movimento tra due celle adiacenti (salita=2, piano/discesa=1)
     int32 MoveCost(AGridCell* From, AGridCell* To) const;

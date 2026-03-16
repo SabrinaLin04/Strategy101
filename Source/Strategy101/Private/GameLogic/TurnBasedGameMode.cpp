@@ -172,7 +172,7 @@ void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
     if (!ClassToSpawn) return;
 
     FVector WorldPos = Cell->GetActorLocation();
-    WorldPos.Z += 60.f;
+    WorldPos.Z += 20.f;
 
     FActorSpawnParameters Params;
     Params.Owner = this;
@@ -185,6 +185,7 @@ void ATurnBasedGameMode::SpawnUnitAtCell(AGridCell* Cell)
     Unit->SpawnGridY = Cell->GridY;
     Unit->UnitOwner = EOwner::Human;
     Unit->OwnerColor = HumanUnitColor;
+
     Unit->SetOwnerColor();
     Cell->bIsOccupied = true;
 
@@ -263,7 +264,7 @@ void ATurnBasedGameMode::SpawnAIUnitAtCell(AGridCell* Cell)
     if (!ClassToSpawn) return;
 
     FVector WorldPos = Cell->GetActorLocation();
-    WorldPos.Z += 60.f;
+    WorldPos.Z += 20.f;
 
     FActorSpawnParameters Params;
     Params.Owner = this;
@@ -698,7 +699,7 @@ void ATurnBasedGameMode::DoMovementStep()
     if (!NextCell) return;
 
     FVector NewWorldPos = NextCell->GetActorLocation();
-    NewWorldPos.Z += 60.f;
+    NewWorldPos.Z += 20.f;
     MovingUnit->SetActorLocation(NewWorldPos);
     MovingUnit->GridX = NextPos.X;
     MovingUnit->GridY = NextPos.Y;
@@ -724,6 +725,7 @@ void ATurnBasedGameMode::HumanConfirmPosition()
     ATurnBasedGameState* GS = GetTurnGameState();
     if (!GS || GS->CurrentTurn != ETurnOwner::Human) return;
     if (!SelectedUnit) return;
+    if (SelectedUnit->bHasMoved && SelectedUnit->bHasAttacked) return; // unità ha già esaurito entrambe le azioni
     SelectedUnit->bHasMoved = true;
     ClearMovementRange();
     ShowAttackRange(SelectedUnit);
@@ -776,7 +778,7 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
     bool bLowHP = (Unit->CurrentHP < Unit->MaxHP * 0.5f);
     bool bIsSniper = (Unit->AttackType == EAttackType::Sniper);
 
-    //controlla se l'unità è già nella zona di cattura di una torre contestata
+    // controlla se l'unità è già nella zona di cattura di una torre contestata
     bool bAlreadyInContestedZone = false;
     if (bLowHP && !bIsSniper)
     {
@@ -793,7 +795,7 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
         }
     }
 
-    //se Brawler con HP basse è già nella zona: rimane fermo e attacca
+    // se Brawler con HP basse è già nella zona: rimane fermo e attacca
     if (bAlreadyInContestedZone)
     {
         bIsAIMoving = false;
@@ -801,7 +803,7 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
         return;
     }
 
-    //trova il nemico più debole (HP più basse)
+    // trova il nemico più debole (HP più basse)
     ABaseUnit* WeakestEnemy = nullptr;
     int32 MinHP = INT_MAX;
     for (ABaseUnit* Enemy : GS->HumanUnits)
@@ -810,7 +812,7 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
         if (Enemy->CurrentHP < MinHP) { MinHP = Enemy->CurrentHP; WeakestEnemy = Enemy; }
     }
 
-    //controlla se lo Sniper nemico è nella zona di una torre da contestare
+    // controlla se lo Sniper nemico è nella zona di una torre da contestare
     bool bSniperInTowerZone = false;
     ATower* TargetTowerWithSniper = nullptr;
     if (bLowHP && !bIsSniper && WeakestEnemy && WeakestEnemy->AttackType == EAttackType::Sniper)
@@ -837,18 +839,22 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
         if (Pair.Key == FIntPoint(Unit->GridX, Unit->GridY)) continue;
         float Score = 0.f;
 
-        //distanza dal nemico più debole
+        // distanza reale dal nemico più debole
         float WeakEnemyDist = FLT_MAX;
         if (WeakestEnemy)
-            WeakEnemyDist = FMath::Abs(Pair.Key.X - WeakestEnemy->GridX) + FMath::Abs(Pair.Key.Y - WeakestEnemy->GridY);
+        {
+            int32 D = Pathfinding->GetActualDistance(GridManagerRef, Pair.Key, FIntPoint(WeakestEnemy->GridX, WeakestEnemy->GridY));
+            WeakEnemyDist = (D >= 0) ? (float)D : 9999.f;
+        }
 
-        //distanza dal nemico più vicino
+        // distanza reale dal nemico più vicino
         float MinEnemyDist = FLT_MAX;
         for (ABaseUnit* Enemy : GS->HumanUnits)
         {
             if (!Enemy || !Enemy->IsAlive()) continue;
-            float D = FMath::Abs(Pair.Key.X - Enemy->GridX) + FMath::Abs(Pair.Key.Y - Enemy->GridY);
-            if (D < MinEnemyDist) MinEnemyDist = D;
+            int32 D = Pathfinding->GetActualDistance(GridManagerRef, Pair.Key, FIntPoint(Enemy->GridX, Enemy->GridY));
+            float RealD = (D >= 0) ? (float)D : 9999.f;
+            if (RealD < MinEnemyDist) MinEnemyDist = RealD;
         }
 
         if (bEnemyHasTwoTowers)
@@ -857,15 +863,16 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
             for (ATower* Tower : GridManagerRef->GetTowers())
             {
                 if (!Tower || Tower->OwnerPlayer != ETowerOwner::Human) continue;
-                float D = FMath::Abs(Pair.Key.X - Tower->GridX) + FMath::Abs(Pair.Key.Y - Tower->GridY);
-                if (D < MinTowerDist) MinTowerDist = D;
+                int32 D = Pathfinding->GetActualDistance(GridManagerRef, Pair.Key, FIntPoint(Tower->GridX, Tower->GridY));
+                float RealD = (D >= 0) ? (float)D : 9999.f;
+                if (RealD < MinTowerDist) MinTowerDist = RealD;
             }
             Score = MinTowerDist * 3.f;
         }
         else if (bLowHP && !bIsSniper && bSniperInTowerZone && TargetTowerWithSniper)
         {
-            float TowerDist = FMath::Abs(Pair.Key.X - TargetTowerWithSniper->GridX)
-                + FMath::Abs(Pair.Key.Y - TargetTowerWithSniper->GridY);
+            int32 D = Pathfinding->GetActualDistance(GridManagerRef, Pair.Key, FIntPoint(TargetTowerWithSniper->GridX, TargetTowerWithSniper->GridY));
+            float TowerDist = (D >= 0) ? (float)D : 9999.f;
             Score = TowerDist * 2.f + WeakEnemyDist * 1.f;
         }
         else if (bLowHP && !bIsSniper)
@@ -878,8 +885,9 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
             for (ATower* Tower : GridManagerRef->GetTowers())
             {
                 if (!Tower || Tower->OwnerPlayer != ETowerOwner::None) continue;
-                float D = FMath::Abs(Pair.Key.X - Tower->GridX) + FMath::Abs(Pair.Key.Y - Tower->GridY);
-                if (D < MinNeutralTowerDist) MinNeutralTowerDist = D;
+                int32 D = Pathfinding->GetActualDistance(GridManagerRef, Pair.Key, FIntPoint(Tower->GridX, Tower->GridY));
+                float RealD = (D >= 0) ? (float)D : 9999.f;
+                if (RealD < MinNeutralTowerDist) MinNeutralTowerDist = RealD;
             }
             Score += MinNeutralTowerDist * 2.f;
             if (bIsSniper)
@@ -894,7 +902,7 @@ void ATurnBasedGameMode::ProcessNextAIUnitHeuristic()
             Score += Pair.Value * 1.f;
         }
 
-        //bonus forte se da questa cella posso attaccare direttamente un nemico
+        // bonus forte se da questa cella posso attaccare direttamente un nemico (Manhattan ok: è range d'attacco)
         for (ABaseUnit* Enemy : GS->HumanUnits)
         {
             if (!Enemy || !Enemy->IsAlive()) continue;

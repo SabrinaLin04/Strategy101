@@ -31,12 +31,10 @@ void ATurnBasedGameState::SwitchTurn()
 {
     if (CurrentTurn == ETurnOwner::Human)
     {
-        bHumanActedThisCycle = true;
         CurrentTurn = ETurnOwner::AI;
     }
     else
     {
-        bAIActedThisCycle = true;
         CurrentTurn = ETurnOwner::Human;
         TurnNumber++;
     }
@@ -47,19 +45,17 @@ void ATurnBasedGameState::UpdateTowerCounts(int32 HumanTowers, int32 AITowers, E
     HumanTowersControlled = HumanTowers;
     AITowersControlled = AITowers;
 
-    if (TurnJustEnded == ETurnOwner::Human) bHumanActedThisCycle = true;
-    if (TurnJustEnded == ETurnOwner::AI) bAIActedThisCycle = true;
-
-    //ciclo completo: entrambi hanno agito
-    if (bHumanActedThisCycle && bAIActedThisCycle)
+    // Incrementa il counter dell'avversario di chi ha appena giocato
+    if (TurnJustEnded == ETurnOwner::AI)
     {
+        // E' appena finito il turno dell'AI: se l'Human tiene 2+ torri, il suo counter avanza
         if (HumanTowers >= 2) HumanConsecutiveTowerTurns++;
         else HumanConsecutiveTowerTurns = 0;
-
+    }
+    else
+    {
+        // E' appena finito il turno dell'Human: se l'AI tiene 2+ torri, il suo counter avanza
         if (AITowers >= 2) AIConsecutiveTowerTurns++;
         else AIConsecutiveTowerTurns = 0;
-
-        bHumanActedThisCycle = false;
-        bAIActedThisCycle = false;
     }
 }

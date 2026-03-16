@@ -5,33 +5,30 @@ ATower::ATower()
 {
     PrimaryActorTick.bCanEverTick = false;
 
-    TowerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TowerMesh"));
-    RootComponent = TowerMesh; // deve essere PRIMA degli attach
+    USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+    RootComponent = Root;
 
-    LeftMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LeftMesh"));
-    LeftMesh->SetupAttachment(RootComponent);
-    LeftMesh->SetRelativeLocation(FVector(-25.f, 0.f, 1.f));
-    LeftMesh->SetRelativeScale3D(FVector(0.5f, 1.f, 1.f));
+    TowerMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TowerMesh"));
+    TowerMesh->SetupAttachment(Root);
 
     RightMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("RightMesh"));
-    RightMesh->SetupAttachment(RootComponent);
-    RightMesh->SetRelativeLocation(FVector(25.f, 0.f, 1.f));
-    RightMesh->SetRelativeScale3D(FVector(0.5f, 1.f, 1.f));
+    RightMesh->SetupAttachment(Root);
+    RightMesh->SetVisibility(false);
 
-    // carica il Plane di default di UE direttamente dal codice
     static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaneMesh(TEXT("/Engine/BasicShapes/Plane.Plane"));
     static ConstructorHelpers::FObjectFinder<UMaterialInterface> TowerMat(TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MITower.MITower'"));
+    static ConstructorHelpers::FObjectFinder<UMaterialInterface> TowerMatHalf(TEXT("/Script/Engine.MaterialInstanceConstant'/Game/Materials/MI_TowerHalf.MI_TowerHalf'"));
 
     if (PlaneMesh.Succeeded())
     {
-        LeftMesh->SetStaticMesh(PlaneMesh.Object);
+        TowerMesh->SetStaticMesh(PlaneMesh.Object);
         RightMesh->SetStaticMesh(PlaneMesh.Object);
     }
     if (TowerMat.Succeeded())
-    {
-        LeftMesh->SetMaterial(0, TowerMat.Object);
-        RightMesh->SetMaterial(0, TowerMat.Object);
-    }
+        TowerMesh->SetMaterial(0, TowerMat.Object);
+
+    if (TowerMatHalf.Succeeded())
+        RightMesh->SetMaterial(0, TowerMatHalf.Object);
 
     GridX = 0;
     GridY = 0;
@@ -43,57 +40,52 @@ ATower::ATower()
 void ATower::BeginPlay()
 {
     Super::BeginPlay();
+
+    RightMesh->SetVisibility(true);
+    TowerDynMat = TowerMesh->CreateAndSetMaterialInstanceDynamic(0);
+    RightDynMat = RightMesh->CreateAndSetMaterialInstanceDynamic(0);
+    RightMesh->SetVisibility(false);
+
     UpdateVisualState();
+
     EnableInput(GetWorld()->GetFirstPlayerController());
     OnClicked.AddDynamic(this, &ATower::OnTowerClicked);
 }
 
 void ATower::UpdateVisualState()
 {
-    if (!TowerMesh || TowerMesh->GetNumMaterials() == 0) return;
+    if (!TowerMesh || !RightMesh) return;
 
-    if (!TowerDynMat)
-        TowerDynMat = TowerMesh->CreateAndSetMaterialInstanceDynamic(0);
-    if (!TowerDynMat) return;
+    if (!TowerDynMat) TowerDynMat = TowerMesh->CreateAndSetMaterialInstanceDynamic(0);
+    if (!RightDynMat) RightDynMat = RightMesh->CreateAndSetMaterialInstanceDynamic(0);
+    if (!TowerDynMat || !RightDynMat) return;
 
-    if (TowerTexture)
-        TowerDynMat->SetTextureParameterValue(TEXT("TowerTexture"), TowerTexture);
-
-    if (TowerState == ETowerState::Contested)
+    FLinearColor TowerColor;
+    switch (TowerState)
     {
-        // nasconde la torre intera e mostra le due metà
-        TowerMesh->SetVisibility(false);
-        LeftMesh->SetVisibility(true);
-        RightMesh->SetVisibility(true);
-
-        if (!LeftDynMat)  LeftDynMat = LeftMesh->CreateAndSetMaterialInstanceDynamic(0);
-        if (!RightDynMat) RightDynMat = RightMesh->CreateAndSetMaterialInstanceDynamic(0);
-
-        if (TowerTexture)
-        {
-            LeftDynMat->SetTextureParameterValue(TEXT("TowerTexture"), TowerTexture);
-            RightDynMat->SetTextureParameterValue(TEXT("TowerTexture"), TowerTexture);
-        }
-
-        LeftDynMat->SetVectorParameterValue(TEXT("BaseColor"), HumanColor);
-        RightDynMat->SetVectorParameterValue(TEXT("BaseColor"), AIColor);
-    }
-    else
-    {
-        // mostra la torre intera e nasconde le due metà
-        TowerMesh->SetVisibility(true);
-        LeftMesh->SetVisibility(false);
+    case ETowerState::Neutral:
+        TowerColor = FLinearColor(0.7f, 0.7f, 0.7f);
         RightMesh->SetVisibility(false);
-
-        FLinearColor Color;
-        switch (TowerState)
-        {
-        case ETowerState::Neutral:    Color = FLinearColor(0.7f, 0.7f, 0.7f); break;
-        case ETowerState::Controlled: Color = (OwnerPlayer == ETowerOwner::Human) ? HumanColor : AIColor; break;
-        default:                      Color = FLinearColor(0.7f, 0.7f, 0.7f); break;
-        }
-        TowerDynMat->SetVectorParameterValue(TEXT("BaseColor"), Color);
+        break;
+    case ETowerState::Controlled:
+        TowerColor = (OwnerPlayer == ETowerOwner::Human) ? HumanColor : AIColor;
+        RightMesh->SetVisibility(false);
+        break;
+    case ETowerState::Contested:
+        TowerColor = (OwnerPlayer == ETowerOwner::Human) ? HumanColor : AIColor;
+        RightMesh->SetVisibility(true);
+        RightDynMat->SetScalarParameterValue(TEXT("UScale"), 0.5f);
+        RightDynMat->SetScalarParameterValue(TEXT("UOffset"), 0.5f);
+        RightDynMat->SetVectorParameterValue(TEXT("BaseColor"),
+            (OwnerPlayer == ETowerOwner::Human) ? AIColor : HumanColor);
+        break;
+    default:
+        TowerColor = FLinearColor(0.7f, 0.7f, 0.7f);
+        RightMesh->SetVisibility(false);
+        break;
     }
+
+    TowerDynMat->SetVectorParameterValue(TEXT("BaseColor"), TowerColor);
 }
 
 void ATower::OnTowerClicked(AActor* TouchedActor, FKey ButtonPressed)
@@ -106,7 +98,6 @@ void ATower::EvaluateState(bool bHumanInZone, bool bAIInZone)
 {
     if (bHumanInZone && bAIInZone)
     {
-        //contesa: rimuove il punto al proprietario precedente
         TowerState = ETowerState::Contested;
         OwnerPlayer = ETowerOwner::None;
     }
@@ -122,14 +113,11 @@ void ATower::EvaluateState(bool bHumanInZone, bool bAIInZone)
     }
     else
     {
-        //nessuna unità in zona: mantieni il proprietario precedente se la torre era Controlled
-        //torna Neutral solo se era Contested o non aveva mai avuto proprietario
         if (TowerState == ETowerState::Contested)
         {
             TowerState = ETowerState::Neutral;
             OwnerPlayer = ETowerOwner::None;
         }
-        //se era Controlled rimane Controlled con lo stesso OwnerPlayer
     }
 
     UpdateVisualState();

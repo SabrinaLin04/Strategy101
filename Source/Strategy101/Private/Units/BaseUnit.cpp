@@ -26,13 +26,13 @@ ABaseUnit::ABaseUnit()
 void ABaseUnit::SetOwnerColor()
 {
     if (!UnitMesh) return;
+
     UMaterialInstanceDynamic* DynMat = UnitMesh->CreateAndSetMaterialInstanceDynamic(0);
     if (DynMat)
         DynMat->SetVectorParameterValue(TEXT("BaseColor"), OwnerColor);
     UE_LOG(LogTemp, Warning, TEXT("SetOwnerColor called R:%f G:%f B:%f"),
         OwnerColor.R, OwnerColor.G, OwnerColor.B);
 }
-
 void ABaseUnit::BeginPlay()
 {
     Super::BeginPlay();
@@ -162,7 +162,7 @@ int32 ABaseUnit::PerformAttack_Implementation(AActor* Target)
                     if (SpawnCell)
                     {
                         FVector WorldPos = SpawnCell->GetActorLocation();
-                        WorldPos.Z += 60.f;
+                        WorldPos.Z += 20.f;
                         UnitToRespawn->SetActorLocation(WorldPos);
                     }
 

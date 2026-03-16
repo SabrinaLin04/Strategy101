@@ -132,3 +132,45 @@ TMap<FIntPoint, int32> UPathfindingComponent::GetReachableCells(AGridManager* Gr
 
     return CostMap;
 }
+
+int32 UPathfindingComponent::GetActualDistance(AGridManager* Grid, FIntPoint Start, FIntPoint Goal) const
+{
+    if (!Grid) return -1;
+
+    TMap<FIntPoint, int32> GScore;
+    TArray<TPair<int32, FIntPoint>> Queue;
+    GScore.Add(Start, 0);
+    Queue.Add({ 0, Start });
+    const TArray<FIntPoint> Dirs = { {1,0},{-1,0},{0,1},{0,-1} };
+
+    while (Queue.Num() > 0)
+    {
+        Queue.Sort([](const TPair<int32, FIntPoint>& A, const TPair<int32, FIntPoint>& B) { return A.Key < B.Key; });
+        auto [Cost, Current] = Queue[0];
+        Queue.RemoveAt(0);
+
+        if (Current == Goal) return Cost;
+        if (Cost > GScore.FindRef(Current)) continue;
+
+        for (const FIntPoint& Dir : Dirs)
+        {
+            FIntPoint Neighbor(Current.X + Dir.X, Current.Y + Dir.Y);
+            if (Neighbor.X < 0 || Neighbor.X >= 25 || Neighbor.Y < 0 || Neighbor.Y >= 25) continue;
+
+            AGridCell* NeighborCell = Grid->GetCell(Neighbor.X, Neighbor.Y);
+            AGridCell* CurrentCell = Grid->GetCell(Current.X, Current.Y);
+
+            // permette di raggiungere il Goal anche se occupato (per calcolo distanza attacco)
+            if (Neighbor != Goal && !IsWalkable(NeighborCell)) continue;
+            if (!NeighborCell) continue;
+
+            int32 NewCost = GScore.FindRef(Current) + MoveCost(CurrentCell, NeighborCell);
+            if (!GScore.Contains(Neighbor) || NewCost < GScore[Neighbor])
+            {
+                GScore.Add(Neighbor, NewCost);
+                Queue.Add({ NewCost, Neighbor });
+            }
+        }
+    }
+    return -1; // irraggiungibile
+}

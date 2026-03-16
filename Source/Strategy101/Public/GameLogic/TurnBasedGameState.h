@@ -28,9 +28,6 @@ class STRATEGY101_API ATurnBasedGameState : public AGameStateBase
 public:
     ATurnBasedGameState();
 
-    bool bHumanActedThisCycle = false;
-    bool bAIActedThisCycle = false;
-
     /** Fase corrente della partita */
     UPROPERTY(BlueprintReadWrite, Category = "GameState")
     EGamePhase CurrentPhase;
