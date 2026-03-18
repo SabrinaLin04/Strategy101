@@ -335,6 +335,12 @@ void ATurnBasedGameMode::StartGamePhase()
         if (GameHUDWidgetRef) GameHUDWidgetRef->AddToViewport();
     }
 
+    if (HUDController && HPBarOverlayClass)
+    {
+        HPBarOverlayRef = CreateWidget<UHPBarOverlay>(HUDController, HPBarOverlayClass);
+        if (HPBarOverlayRef) HPBarOverlayRef->AddToViewport();
+    }
+
     RefreshHUD();
     
 }

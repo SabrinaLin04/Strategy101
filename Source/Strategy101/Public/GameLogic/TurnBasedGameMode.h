@@ -13,6 +13,7 @@
 #include "UI/CoinFlipWidget.h"
 #include "UI/PlacementWidget.h"
 #include "UI/GameHUDWidget.h"
+#include "UI/HPBarOverlay.h"
 #include "Grid/GridCell.h"
 #include "GameLogic/TowerControlSystem.h"
 #include "Grid/Tower.h"
@@ -106,6 +107,12 @@ public:
 
     UPROPERTY(BlueprintReadWrite, Category = "Units")
     FLinearColor AIUnitColor = FLinearColor(1.f, 1.f, 1.f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UHPBarOverlay> HPBarOverlayClass;
+
+    UPROPERTY()
+    UHPBarOverlay* HPBarOverlayRef;
 
     //getter per il GridManager (usato dal TowerControlSystem)
     AGridManager* GetGridManager() const { return GridManagerRef; }
